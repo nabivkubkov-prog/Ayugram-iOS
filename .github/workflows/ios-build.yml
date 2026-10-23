@@ -16,6 +16,9 @@ concurrency:
   group: ios-build-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-15
@@ -307,6 +310,23 @@ jobs:
             build/artifacts/Swiftgram.DSYMs.zip
           if-no-files-found: error
           retention-days: 14
+
+      # Unsigned IPA for Feather/Sideloadly, which re-sign it with the user's own
+      # Apple ID. Releases give a stable public URL; artifacts need a GitHub login.
+      - name: Publish IPA as a pre-release
+        if: steps.build.outcome == 'success' && steps.signing.outputs.mode == 'unsigned'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="build-${{ github.run_number }}"
+          cp build/artifacts/Swiftgram.ipa "build/artifacts/RufatGram-${TAG}.ipa"
+          gh release create "$TAG" "build/artifacts/RufatGram-${TAG}.ipa" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --prerelease \
+            --title "RufatGram ${TAG} (unsigned)" \
+            --notes "Unsigned build from ${{ github.ref_name }} @ ${{ github.sha }}. Sign it on install with Feather or Sideloadly."
 
       - name: Upload build log
         if: always()
