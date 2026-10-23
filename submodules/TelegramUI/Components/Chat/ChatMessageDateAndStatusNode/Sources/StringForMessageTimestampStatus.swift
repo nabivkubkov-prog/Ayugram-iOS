@@ -193,5 +193,10 @@ public func stringForMessageTimestampStatus(accountPeerId: PeerId, message: Mess
         }
     }
     
+    // MARK: RufatGram: kept copy of a message deleted on the server.
+    if message.rufatIsDeleted {
+        dateText = (strings.baseLanguageCode == "ru" ? "удалено " : "deleted ") + dateText
+    }
+    
     return dateText
 }

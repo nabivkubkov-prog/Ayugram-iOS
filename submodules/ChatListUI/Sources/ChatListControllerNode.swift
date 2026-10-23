@@ -22,6 +22,7 @@ import ChatFolderLinkPreviewScreen
 import ChatListHeaderComponent
 import StoryPeerListComponent
 import TelegramNotices
+import WallpaperBackgroundNode
 
 public enum ChatListContainerNodeFilter: Equatable {
     case all
@@ -476,7 +477,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
         
         super.init()
         
-        self.backgroundColor = presentationData.theme.chatList.backgroundColor
+        self.backgroundColor = SGSimpleSettings.shared.wallpaperInChatList ? .clear : presentationData.theme.chatList.backgroundColor // MARK: RufatGram
         
         let itemNode = ChatListContainerItemNode(context: self.context, controller: self.controller, location: self.location, filter: nil, chatListMode: chatListMode, previewing: self.previewing, isInlineMode: self.isInlineMode, controlsHistoryPreload: self.controlsHistoryPreload, presentationData: presentationData, animationCache: self.animationCache, animationRenderer: self.animationRenderer, becameEmpty: { [weak self] filter in
             self?.filterBecameEmpty(filter)
@@ -721,7 +722,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
             if let _ = validLayout.inlineNavigationLocation {
                 self.backgroundColor = self.presentationData.theme.chatList.backgroundColor.mixedWith(self.presentationData.theme.chatList.pinnedItemBackgroundColor, alpha: validLayout.inlineNavigationTransitionFraction)
             } else {
-                self.backgroundColor = self.presentationData.theme.chatList.backgroundColor
+                self.backgroundColor = SGSimpleSettings.shared.wallpaperInChatList ? .clear : self.presentationData.theme.chatList.backgroundColor // MARK: RufatGram
             }
         }
         
@@ -1052,6 +1053,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
 }
 
 final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
+    private var rufatWallpaperNode: WallpaperBackgroundNode? // MARK: RufatGram
     private let context: AccountContext
     private let location: ChatListControllerLocation
     private var presentationData: PresentationData
@@ -1156,6 +1158,14 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         })
         
         self.backgroundColor = presentationData.theme.chatList.backgroundColor
+        
+        // MARK: RufatGram: optional chat wallpaper behind the chat list.
+        if SGSimpleSettings.shared.wallpaperInChatList {
+            let wallpaperNode = createWallpaperBackgroundNode(context: context, forChatDisplay: false)
+            wallpaperNode.update(wallpaper: presentationData.chatWallpaper, animated: false)
+            self.rufatWallpaperNode = wallpaperNode
+            self.addSubnode(wallpaperNode)
+        }
         
         self.addSubnode(self.mainContainerNode)
         
@@ -1343,6 +1353,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         self.presentationData = presentationData
         
         self.backgroundColor = self.presentationData.theme.chatList.backgroundColor
+        self.rufatWallpaperNode?.update(wallpaper: presentationData.chatWallpaper, animated: false) // MARK: RufatGram
         
         self.mainContainerNode.updatePresentationData(presentationData)
         self.inlineStackContainerNode?.updatePresentationData(presentationData)
@@ -1537,6 +1548,11 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
     }
     
     func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, visualNavigationHeight: CGFloat, cleanNavigationBarHeight: CGFloat, storiesInset: CGFloat, transition: ContainedViewLayoutTransition) {
+        // MARK: RufatGram
+        if let wallpaperNode = self.rufatWallpaperNode {
+            transition.updateFrame(node: wallpaperNode, frame: CGRect(origin: CGPoint(), size: layout.size))
+            wallpaperNode.updateLayout(size: layout.size, displayMode: .aspectFill, transition: transition)
+        }
         var navigationBarHeight = navigationBarHeight
         var visualNavigationHeight = visualNavigationHeight
         var cleanNavigationBarHeight = cleanNavigationBarHeight

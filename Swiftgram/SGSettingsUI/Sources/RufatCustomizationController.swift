@@ -14,6 +14,7 @@ import AccountContext
 
 private enum RufatCustomizationSection: Int32, SGItemListSection {
     case appearance
+    case wallpaper
     case chatList
     case tabs
     case messages
@@ -22,6 +23,7 @@ private enum RufatCustomizationSection: Int32, SGItemListSection {
 }
 
 private enum RufatCustomizationToggle: String {
+    case wallpaperInChatList
     case compactChatList
     case compactFolderNames
     case hideTabBar
@@ -36,6 +38,7 @@ private enum RufatCustomizationToggle: String {
 private enum RufatCustomizationSlider: String {
     case stickerSize
     case accountColorsSaturation
+    case chatListItemOpacity
 }
 
 private enum RufatCustomizationLink: String {
@@ -56,6 +59,16 @@ private func rufatCustomizationEntries(presentationData: PresentationData) -> [R
 
     entries.append(.header(id: id.count, section: .appearance, text: rufatText(lang, "APPEARANCE", "ОФОРМЛЕНИЕ"), badge: nil))
     entries.append(.disclosure(id: id.count, section: .appearance, link: .themesAndWallpapers, text: rufatText(lang, "Themes, Wallpapers and Text Size", "Темы, обои и размер текста")))
+
+    entries.append(.header(id: id.count, section: .wallpaper, text: rufatText(lang, "WALLPAPER EVERYWHERE", "ОБОИ ВЕЗДЕ"), badge: nil))
+    entries.append(.toggle(id: id.count, section: .wallpaper, settingName: .wallpaperInChatList, value: settings.wallpaperInChatList, text: rufatText(lang, "Chat Wallpaper in Chat List", "Обои чата в списке чатов"), enabled: true))
+    if settings.wallpaperInChatList {
+        entries.append(.header(id: id.count, section: .wallpaper, text: rufatText(lang, "ROW OPACITY", "НЕПРОЗРАЧНОСТЬ СТРОК"), badge: nil))
+        entries.append(.percentageSlider(id: id.count, section: .wallpaper, settingName: .chatListItemOpacity, value: settings.chatListItemOpacity))
+    } else {
+        id.increment(2)
+    }
+    entries.append(.notice(id: id.count, section: .wallpaper, text: rufatText(lang, "Uses the wallpaper chosen in Themes. Applies after restarting the app.", "Используются обои, выбранные в «Темах». Применяется после перезапуска приложения.")))
 
     entries.append(.header(id: id.count, section: .chatList, text: rufatText(lang, "CHAT LIST", "СПИСОК ЧАТОВ"), badge: nil))
     entries.append(.toggle(id: id.count, section: .chatList, settingName: .compactChatList, value: settings.compactChatList, text: rufatText(lang, "Compact Chat List", "Компактный список чатов"), enabled: true))
@@ -91,6 +104,8 @@ public func rufatCustomizationController(context: AccountContext, openThemesAndW
         setBoolValue: { setting, value in
             let settings = SGSimpleSettings.shared
             switch setting {
+            case .wallpaperInChatList:
+                settings.wallpaperInChatList = value
             case .compactChatList:
                 settings.compactChatList = value
             case .compactFolderNames:
@@ -123,6 +138,11 @@ public func rufatCustomizationController(context: AccountContext, openThemesAndW
             case .accountColorsSaturation:
                 if settings.accountColorsSaturation != value {
                     settings.accountColorsSaturation = value
+                    simplePromise.set(true)
+                }
+            case .chatListItemOpacity:
+                if settings.chatListItemOpacity != value {
+                    settings.chatListItemOpacity = value
                     simplePromise.set(true)
                 }
             }

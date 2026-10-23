@@ -156,6 +156,9 @@ public class SGSimpleSettings {
         case ghostHideReadReceipts
         case ghostHideOnline
         case ghostHideTyping
+        case keepDeletedMessages
+        case wallpaperInChatList
+        case chatListItemOpacity
     }
     
     public enum DownloadSpeedBoostValues: String, CaseIterable {
@@ -289,6 +292,9 @@ public class SGSimpleSettings {
         Keys.ghostHideReadReceipts.rawValue: false,
         Keys.ghostHideOnline.rawValue: false,
         Keys.ghostHideTyping.rawValue: false,
+        Keys.keepDeletedMessages.rawValue: false,
+        Keys.wallpaperInChatList.rawValue: false,
+        Keys.chatListItemOpacity.rawValue: 70,
     ]
     
     public static let groupDefaultValues: [String: Any] = [
@@ -529,6 +535,16 @@ public class SGSimpleSettings {
 
     @UserDefault(key: Keys.ghostHideTyping.rawValue)
     public var ghostHideTyping: Bool
+
+    @UserDefault(key: Keys.keepDeletedMessages.rawValue)
+    public var keepDeletedMessages: Bool
+
+    @UserDefault(key: Keys.wallpaperInChatList.rawValue)
+    public var wallpaperInChatList: Bool
+
+    // Percent, 0...100, opacity of chat list rows over the wallpaper.
+    @UserDefault(key: Keys.chatListItemOpacity.rawValue)
+    public var chatListItemOpacity: Int32
 }
 
 extension SGSimpleSettings {

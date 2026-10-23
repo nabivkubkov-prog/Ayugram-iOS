@@ -15,6 +15,7 @@ import AccountContext
 private enum RufatExtraSection: Int32, SGItemListSection {
     case ghost
     case stories
+    case history
     case accounts
 }
 
@@ -23,6 +24,7 @@ private enum RufatExtraSetting: String {
     case ghostHideOnline
     case ghostHideTyping
     case storyStealthMode
+    case keepDeletedMessages
 }
 
 private typealias RufatExtraEntry = SGItemListUIEntry<RufatExtraSection, RufatExtraSetting, AnyHashable, AnyHashable, AnyHashable, AnyHashable>
@@ -51,6 +53,12 @@ private func rufatExtraEntries(presentationData: PresentationData) -> [RufatExtr
         "The app does not send the \"viewed\" mark for stories.",
         "Приложение не отправляет отметку «просмотрено» для историй.")))
 
+    entries.append(.header(id: id.count, section: .history, text: rufatText(lang, "MESSAGE HISTORY", "ИСТОРИЯ СООБЩЕНИЙ"), badge: nil))
+    entries.append(.toggle(id: id.count, section: .history, settingName: .keepDeletedMessages, value: settings.keepDeletedMessages, text: rufatText(lang, "Keep Deleted Messages", "Сохранять удалённые сообщения"), enabled: true))
+    entries.append(.notice(id: id.count, section: .history, text: rufatText(lang,
+        "Messages deleted by others stay on this device marked \"deleted\". Only messages received while the option is on are kept. Secret chats and self-destructing messages are not kept. Chat history is stored locally by the app itself.",
+        "Сообщения, удалённые собеседником, остаются на этом устройстве с пометкой «удалено». Сохраняются только сообщения, полученные при включённой настройке. Секретные чаты и самоуничтожающиеся сообщения не сохраняются. Переписка и так хранится локально в самом приложении.")))
+
     entries.append(.header(id: id.count, section: .accounts, text: rufatText(lang, "ACCOUNTS", "АККАУНТЫ"), badge: nil))
     entries.append(.notice(id: id.count, section: .accounts, text: rufatText(lang,
         "There is no limit on the number of accounts: add them in Settings → Add Account.",
@@ -76,6 +84,8 @@ public func rufatExtraController(context: AccountContext) -> ViewController {
                 settings.ghostHideTyping = value
             case .storyStealthMode:
                 settings.storyStealthMode = value
+            case .keepDeletedMessages:
+                settings.keepDeletedMessages = value
             }
             simplePromise.set(true)
         }

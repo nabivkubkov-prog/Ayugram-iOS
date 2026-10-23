@@ -4178,14 +4178,21 @@ func replayFinalState(
                 }
             case let .DeleteMessagesWithGlobalIds(ids):
                 var resourceIds: [MediaResourceId] = []
-                transaction.deleteMessagesWithGlobalIds(ids, forEachMedia: { media in
+                // MARK: RufatGram: optionally keep messages deleted by others.
+                let rufatPartition = rufatPartitionDeletedMessages(transaction: transaction, ids: transaction.messageIdsForGlobalIds(ids))
+                rufatMarkMessagesDeleted(transaction: transaction, ids: rufatPartition.keep)
+                transaction.deleteMessages(rufatPartition.remove, forEachMedia: { media in
                     addMessageMediaResourceIdsToRemove(media: media, resourceIds: &resourceIds)
                 })
                 if !resourceIds.isEmpty {
                     let _ = mediaBox.removeCachedResources(Array(Set(resourceIds)), force: true).start()
                 }
                 deletedMessageIds.append(contentsOf: ids.map { .global($0) })
-            case let .DeleteMessages(ids):
+            case let .DeleteMessages(serverIds):
+                // MARK: RufatGram: optionally keep messages deleted by others.
+                let rufatPartition = rufatPartitionDeletedMessages(transaction: transaction, ids: serverIds)
+                rufatMarkMessagesDeleted(transaction: transaction, ids: rufatPartition.keep)
+                let ids = rufatPartition.remove
                 _internal_deleteMessages(transaction: transaction, mediaBox: mediaBox, ids: ids, manualAddMessageThreadStatsDifference: { id, add, remove in
                     addMessageThreadStatsDifference(threadKey: id, remove: remove, addedMessagePeer: nil, addedMessageId: nil, isOutgoing: false)
                 })

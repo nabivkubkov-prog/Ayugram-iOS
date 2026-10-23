@@ -4968,10 +4968,16 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         highlightedBackgroundColor = theme.itemHighlightedBackgroundColor
                     }
                     
+                    // MARK: RufatGram: let the chat list wallpaper show through rows.
+                    var rufatBackgroundColor = backgroundColor
+                    if SGSimpleSettings.shared.wallpaperInChatList && !item.selected {
+                        let opacity = CGFloat(max(0, min(100, SGSimpleSettings.shared.chatListItemOpacity))) / 100.0
+                        rufatBackgroundColor = backgroundColor.withMultipliedAlpha(opacity)
+                    }
                     if animated {
-                        transition.updateBackgroundColor(node: strongSelf.backgroundNode, color: backgroundColor)
+                        transition.updateBackgroundColor(node: strongSelf.backgroundNode, color: rufatBackgroundColor)
                     } else {
-                        strongSelf.backgroundNode.backgroundColor = backgroundColor
+                        strongSelf.backgroundNode.backgroundColor = rufatBackgroundColor
                     }
                     
                     if let inlineNavigationLocation = item.interaction.inlineNavigationLocation {
