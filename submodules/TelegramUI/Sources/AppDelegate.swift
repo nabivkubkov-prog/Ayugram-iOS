@@ -480,8 +480,21 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         
         let baseAppBundleId = Bundle.main.bundleIdentifier!
         let appGroupName = "group.\(baseAppBundleId)"
-        let maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
-        
+        // MARK: RufatGram
+        // Sideloading tools (Feather, Sideloadly) re-sign with a new bundle id and
+        // usually without the matching app group, which made launch stop on a
+        // black screen. Fall back to the app's own container; extensions then
+        // cannot share data with the app, but the app itself works.
+        // A dedicated directory is used because performAppGroupUpgrades deletes
+        // every other directory it finds in the container root.
+        var maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
+        if maybeAppGroupUrl == nil, let libraryUrl = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first {
+            let fallbackUrl = libraryUrl.appendingPathComponent("RufatGramContainer", isDirectory: true)
+            if (try? FileManager.default.createDirectory(at: fallbackUrl, withIntermediateDirectories: true, attributes: nil)) != nil {
+                maybeAppGroupUrl = fallbackUrl
+            }
+        }
+
         let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
         self.buildConfig = buildConfig
         let signatureDict = BuildConfigExtra.signatureDict()
