@@ -1,6 +1,10 @@
 name: RufatGram iOS build
 
 on:
+  # workflow_dispatch only works once this file is on the default branch;
+  # until then feature branches build unsigned on push.
+  push:
+    branches: [ 'feature/**' ]
   workflow_dispatch:
     inputs:
       signed:
