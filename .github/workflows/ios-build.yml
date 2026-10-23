@@ -66,14 +66,17 @@ jobs:
           xcodebuild -version
           xcode-select -p
 
-      - name: Install watchOS simulator runtime for the selected Xcode
+      - name: Install simulator runtimes for the selected Xcode
         run: |
           set -euo pipefail
-          # actool needs a simulator runtime matching the watchOS SDK to compile
-          # the Watch app asset catalog; runner images only ship newer runtimes.
+          # actool/ibtool need simulator runtimes matching the SDKs of the selected
+          # Xcode (Watch asset catalog, LaunchScreen.xib); runner images only ship
+          # newer runtimes.
           xcrun simctl list runtimes
+          xcodebuild -downloadPlatform iOS
           xcodebuild -downloadPlatform watchOS
           xcrun simctl list runtimes
+          df -h "$GITHUB_WORKSPACE"
 
       - name: Verify build configuration template
         run: |
