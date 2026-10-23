@@ -152,6 +152,10 @@ public class SGSimpleSettings {
         case transcriptionBackend
         case translationBackend
         case customAppBadge
+        // MARK: RufatGram
+        case ghostHideReadReceipts
+        case ghostHideOnline
+        case ghostHideTyping
     }
     
     public enum DownloadSpeedBoostValues: String, CaseIterable {
@@ -282,6 +286,9 @@ public class SGSimpleSettings {
         Keys.transcriptionBackend.rawValue: TranscriptionBackend.default.rawValue,
         Keys.translationBackend.rawValue: TranslationBackend.default.rawValue,
         Keys.customAppBadge.rawValue: "",
+        Keys.ghostHideReadReceipts.rawValue: false,
+        Keys.ghostHideOnline.rawValue: false,
+        Keys.ghostHideTyping.rawValue: false,
     ]
     
     public static let groupDefaultValues: [String: Any] = [
@@ -512,11 +519,22 @@ public class SGSimpleSettings {
 
     @UserDefault(key: Keys.customAppBadge.rawValue)
     public var customAppBadge: String
+
+    // MARK: RufatGram
+    @UserDefault(key: Keys.ghostHideReadReceipts.rawValue)
+    public var ghostHideReadReceipts: Bool
+
+    @UserDefault(key: Keys.ghostHideOnline.rawValue)
+    public var ghostHideOnline: Bool
+
+    @UserDefault(key: Keys.ghostHideTyping.rawValue)
+    public var ghostHideTyping: Bool
 }
 
 extension SGSimpleSettings {
     public var isStealthModeEnabled: Bool {
-        return storyStealthMode && canUseStealthMode
+        // MARK: RufatGram: no longer gated by the Swiftgram server flag.
+        return storyStealthMode
     }
     
     public static func makeOutgoingLanguageTranslationKey(accountId: Int64, peerId: Int64) -> String {

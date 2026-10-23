@@ -977,36 +977,13 @@ private func settingsItems(showProfileId: Bool, data: PeerInfoScreenData?, conte
     }
     
     // let locale = presentationData.strings.baseLanguageCode
-    // MARK: Swiftgram
-    let hasNewSGFeatures = {
-        return false
-    }
-    let swiftgramLabel: PeerInfoScreenDisclosureItem.Label
-    if hasNewSGFeatures() {
-        swiftgramLabel = .titleBadge(presentationData.strings.Settings_New, presentationData.theme.list.itemAccentColor)
-    } else {
-        swiftgramLabel = .none
-    }
-
-    let hasNewSGProFeatures = {
-        return false
-    }
-    let swiftgramProLabel: PeerInfoScreenDisclosureItem.Label
-    if hasNewSGProFeatures() {
-        swiftgramProLabel = .titleBadge(presentationData.strings.Settings_New, presentationData.theme.list.itemAccentColor)
-    } else {
-        swiftgramProLabel = .none
-    }
-    
-    
+    // MARK: RufatGram: replaces the Swiftgram and Swiftgram Pro entries.
     let sgWebSettings = context.currentAppConfiguration.with({ $0 }).sgWebSettings
-    if sgWebSettings.global.paymentsEnabled || context.sharedContext.immediateSGStatus.status > 1 {
-        items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 0, label: swiftgramProLabel, text: "Swiftgram Pro", icon: PresentationResourcesSettings.swiftgramPro, action: {
-            interaction.openSettings(.swiftgramPro)
-        }))
-    }
-    items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 1, label: swiftgramLabel, text: "Swiftgram", icon: PresentationResourcesSettings.swiftgram, action: {
+    items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 1, label: .none, text: "Rufat Extra", icon: PresentationResourcesSettings.security, action: {
         interaction.openSettings(.swiftgram)
+    }))
+    items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 2, label: .none, text: presentationData.strings.baseLanguageCode == "ru" ? "Кастомизация" : "Customization", icon: PresentationResourcesSettings.appearance, action: {
+        interaction.openSettings(.swiftgramPro)
     }))
 
     var appIndex = 1000
@@ -10833,18 +10810,16 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             }
         }
         switch section {
+        // MARK: RufatGram
         case .swiftgram:
-            self.controller?.push(sgSettingsController(context: self.context))
+            self.controller?.push(rufatExtraController(context: self.context))
         case .swiftgramPro:
-            if self.context.sharedContext.immediateSGStatus.status > 1 {
-                self.controller?.push(self.context.sharedContext.makeSGProController(context: self.context))
-            } else {
-                if let payWallController = self.context.sharedContext.makeSGPayWallController(context: self.context) {
-                    self.controller?.present(payWallController, in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
-                } else {
-                    self.controller?.present(self.context.sharedContext.makeSGUpdateIOSController(), animated: true)
+            self.controller?.push(rufatCustomizationController(context: self.context, openThemesAndWallpapers: { [weak self] in
+                guard let self else {
+                    return
                 }
-            }
+                (self.controller?.navigationController as? NavigationController)?.pushViewController(themeSettingsController(context: self.context))
+            }))
         case .avatar:
             self.controller?.openAvatarForEditing()
         case .edit:

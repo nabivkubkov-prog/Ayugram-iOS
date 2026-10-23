@@ -3,6 +3,7 @@ import Postbox
 import SwiftSignalKit
 import TelegramApi
 import MtProtoKit
+import SGSimpleSettings
 
 
 public struct PeerActivitySpace: Hashable {
@@ -175,6 +176,10 @@ private func requestActivity(postbox: Postbox, network: Network, accountPeerId: 
                 }
             }
             
+            // MARK: RufatGram: ghost mode does not send typing/recording activity.
+            if SGSimpleSettings.shared.ghostHideTyping {
+                return .complete()
+            }
             if let inputPeer = apiInputPeer(peer) {
                 var flags: Int32 = 0
                 let topMessageId = threadId.flatMap { Int32(clamping: $0) }

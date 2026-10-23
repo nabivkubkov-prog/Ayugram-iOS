@@ -2,6 +2,7 @@ import Foundation
 import Postbox
 import TelegramApi
 import SwiftSignalKit
+import SGSimpleSettings
 
 
 private enum PeerReadStateMarker: Equatable {
@@ -236,6 +237,11 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
             }
         }
     } else {
+        // MARK: RufatGram: ghost mode keeps the read state local and does not
+        // tell the server, so senders do not see read receipts.
+        if SGSimpleSettings.shared.ghostHideReadReceipts {
+            return .single(readState)
+        }
         return inputPeer(postbox: postbox, peerId: peerId)
         |> mapToSignal { inputPeer -> Signal<PeerReadState, PeerReadStateValidationError> in
             switch inputPeer {
