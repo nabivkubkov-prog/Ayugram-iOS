@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""Generates placeholder code signing assets for an unsigned prototype build.
+
+The build system (build-system/Make/BuildConfiguration.py) selects
+provisioning profiles by comparing each profile's application-identifier with
+"<team_id>.<bundle_id>". The profiles shipped in build-system/fake-codesigning
+belong to the official Telegram application, so they never match a custom
+bundle id and Make.py aborts with "Could not find a valid aps-environment
+entitlement". This script rebuilds the profile set for the configured team id
+and bundle id, signed with the same placeholder identity that
+build-system/Make/ImportCertificates.py already imports into the keychain.
+
+These assets are for prototype builds only: they contain no real Apple
+credentials and cannot be used to install on a device. Signed builds use the
+real .p12 and .mobileprovision files supplied through GitHub Secrets.
+
+Usage:
+    python3 tools/ci/generate-fake-codesigning.py \
+        --configuration build-system/rufatgram-configuration.json \
+        --certificates build-system/fake-codesigning/certs \
+        --output "$RUNNER_TEMP/rufatgram-fake-signing"
+"""
+
+import argparse
+import json
+import os
+import plistlib
+import shutil
+import subprocess
+import sys
+import tempfile
+import uuid
+
+# Profile file name -> bundle id suffix (see profile_name_mapping in
+# build-system/Make/BuildConfiguration.py).
+SUFFIXES = {
+    "Telegram": "",
+    "SiriIntents": ".SiriIntents",
+    "NotificationContent": ".NotificationContent",
+    "NotificationService": ".NotificationService",
+    "Share": ".Share",
+    "WatchApp": ".watchkitapp",
+    "WatchExtension": ".watchkitapp.watchkitextension",
+    "Widget": ".Widget",
+    "BroadcastUpload": ".BroadcastUpload",
+    "SGActionRequestHandler": ".SGActionRequestHandler",
+}
+
+
+def run(arguments, check=True):
+    result = subprocess.run(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if check and result.returncode != 0:
+        sys.stderr.write(result.stderr.decode("utf-8", "replace"))
+        raise SystemExit("Command failed: {}".format(" ".join(arguments)))
+    return result
+
+
+def export_identity(p12_path, workdir):
+    """Extracts the placeholder identity to PEM.
+
+    OpenSSL 3 needs -legacy to read the RC2-encoded p12; LibreSSL on macOS
+    reads it directly, so both spellings are attempted.
+    """
+    key_path = os.path.join(workdir, "key.pem")
+    cert_path = os.path.join(workdir, "cert.pem")
+    attempts = [
+        ["openssl", "pkcs12", "-in", p12_path, "-nodes", "-passin", "pass:", "-legacy"],
+        ["openssl", "pkcs12", "-in", p12_path, "-nodes", "-passin", "pass:"],
+    ]
+    for attempt in attempts:
+        result = run(attempt, check=False)
+        if result.returncode == 0:
+            data = result.stdout.decode("utf-8", "replace")
+            cert = data[data.find("-----BEGIN CERTIFICATE-----"):data.find("-----END CERTIFICATE-----") + len("-----END CERTIFICATE-----")]
+            key = None
+            for marker in ("PRIVATE KEY-----", "RSA PRIVATE KEY-----"):
+                start = data.find("-----BEGIN " + marker)
+                if start != -1:
+                    key = data[start:data.find("-----END " + marker) + len("-----END " + marker)]
+                    break
+            if not cert or not key:
+                raise SystemExit("The certificate archive does not contain a private key: {}".format(p12_path))
+            with open(cert_path, "w") as file:
+                file.write(cert + "\n")
+            with open(key_path, "w") as file:
+                file.write(key + "\n")
+            return cert_path, key_path
+    raise SystemExit("Could not read {}".format(p12_path))
+
+
+def certificate_der(cert_path):
+    return run(["openssl", "x509", "-in", cert_path, "-outform", "der"]).stdout
+
+
+def build_profile(team_id, bundle_id, suffix, der):
+    identifier = "{}.{}{}".format(team_id, bundle_id, suffix)
+    return {
+        "AppIDName": "RufatGram",
+        "ApplicationIdentifierPrefix": [team_id],
+        "CreationDate": "2024-01-01T00:00:00Z",
+        "DeveloperCertificates": [der],
+        "Entitlements": {
+            "application-identifier": identifier,
+            "aps-environment": "production",
+            "com.apple.developer.team-identifier": team_id,
+            "get-task-allow": False,
+            "keychain-access-groups": ["{}.{}".format(team_id, bundle_id)],
+        },
+        "ExpirationDate": "2034-01-01T00:00:00Z",
+        "Name": "RufatGram Prototype {}".format(suffix or "App"),
+        "Platform": ["iOS"],
+        "ProvisionedDevices": [],
+        "TeamIdentifier": [team_id],
+        "TeamName": "RufatGram",
+        "TimeToLive": 3650,
+        "UUID": str(uuid.uuid5(uuid.NAMESPACE_DNS, identifier)),
+        "Version": 1,
+    }
+
+
+def write_signed_profile(profile, destination, workdir, cert_path, key_path):
+    plist_path = tempfile.mktemp(suffix=".plist", dir=workdir)
+    with open(plist_path, "wb") as file:
+        plistlib.dump(profile, file)
+    run([
+        "openssl", "smime", "-sign", "-binary", "-nodetach",
+        "-in", plist_path,
+        "-signer", cert_path,
+        "-inkey", key_path,
+        "-outform", "der",
+        "-out", destination,
+    ])
+    os.unlink(plist_path)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--configuration", required=True)
+    parser.add_argument("--certificates", required=True,
+                        help="Directory with the placeholder .p12 and .cer files")
+    parser.add_argument("--output", required=True)
+    arguments = parser.parse_args()
+
+    with open(arguments.configuration) as file:
+        configuration = json.load(file)
+    team_id = configuration["team_id"]
+    bundle_id = configuration["bundle_id"]
+
+    if not team_id or not bundle_id:
+        raise SystemExit("team_id and bundle_id are required in the configuration")
+
+    certificate_files = [name for name in os.listdir(arguments.certificates)
+                         if name.endswith(".p12")]
+    if not certificate_files:
+        raise SystemExit("No .p12 found in {}".format(arguments.certificates))
+
+    output = os.path.abspath(arguments.output)
+    certs_dir = os.path.join(output, "certs")
+    profiles_dir = os.path.join(output, "profiles")
+    shutil.rmtree(output, ignore_errors=True)
+    os.makedirs(certs_dir)
+    os.makedirs(profiles_dir)
+
+    workdir = tempfile.mkdtemp(prefix="rufatgram-fake-signing-")
+    try:
+        p12_path = os.path.join(arguments.certificates, certificate_files[0])
+        cert_path, key_path = export_identity(p12_path, workdir)
+        der = certificate_der(cert_path)
+
+        for name in os.listdir(arguments.certificates):
+            shutil.copyfile(os.path.join(arguments.certificates, name),
+                            os.path.join(certs_dir, name))
+
+        for name, suffix in SUFFIXES.items():
+            profile = build_profile(team_id, bundle_id, suffix, der)
+            write_signed_profile(profile, os.path.join(profiles_dir, name + ".mobileprovision"),
+                                 workdir, cert_path, key_path)
+
+        for file_name in sorted(os.listdir(profiles_dir)):
+            print("Wrote {}".format(os.path.join(profiles_dir, file_name)))
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    main()
