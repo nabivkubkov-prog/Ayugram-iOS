@@ -47,6 +47,22 @@ SUFFIXES = {
     "SGActionRequestHandler": ".SGActionRequestHandler",
 }
 
+# Identifiers used by the upstream profiles in build-system/fake-codesigning.
+TEMPLATE_TEAM_ID = "C67CF9S4VU"
+TEMPLATE_BUNDLE_ID = "ph.telegra.Telegraph"
+
+# Profile file name -> upstream template; targets without one use "Share".
+TEMPLATE_PROFILES = {
+    "Telegram": "Telegram",
+    "SiriIntents": "Intents",
+    "NotificationContent": "NotificationContent",
+    "NotificationService": "NotificationService",
+    "Share": "Share",
+    "WatchApp": "WatchApp",
+    "WatchExtension": "WatchExtension",
+    "Widget": "Widget",
+}
+
 
 def run(arguments, check=True):
     result = subprocess.run(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -93,8 +109,45 @@ def certificate_der(cert_path):
     return run(["openssl", "x509", "-in", cert_path, "-outform", "der"]).stdout
 
 
-def build_profile(team_id, bundle_id, suffix, der):
+def read_profile_plist(path):
+    """Returns the plist embedded in a CMS-signed .mobileprovision file."""
+    with open(path, "rb") as file:
+        data = file.read()
+    start = data.find(b"<?xml")
+    end = data.find(b"</plist>")
+    if start == -1 or end == -1:
+        raise SystemExit("Not a provisioning profile: {}".format(path))
+    return plistlib.loads(data[start:end + len(b"</plist>")])
+
+
+def rebrand(value, team_id, bundle_id):
+    if isinstance(value, str):
+        return value.replace(TEMPLATE_BUNDLE_ID, bundle_id).replace(TEMPLATE_TEAM_ID, team_id)
+    if isinstance(value, list):
+        return [rebrand(item, team_id, bundle_id) for item in value]
+    if isinstance(value, dict):
+        return {key: rebrand(item, team_id, bundle_id) for key, item in value.items()}
+    return value
+
+
+def template_entitlements(templates_dir, name, team_id, bundle_id):
+    """Entitlements of the matching upstream fake profile, rebranded.
+
+    The app requests entitlements such as carplay-messaging, iCloud and app
+    groups; rules_apple rejects the build when the profile lacks any of them,
+    so the upstream set is reused instead of maintaining a hand-written list.
+    """
+    template = TEMPLATE_PROFILES.get(name, "Share")
+    entitlements = read_profile_plist(
+        os.path.join(templates_dir, template + ".mobileprovision"))["Entitlements"]
+    return rebrand(entitlements, team_id, bundle_id)
+
+
+def build_profile(team_id, bundle_id, suffix, der, entitlements):
     identifier = "{}.{}{}".format(team_id, bundle_id, suffix)
+    entitlements = dict(entitlements)
+    entitlements["application-identifier"] = identifier
+    entitlements["com.apple.developer.team-identifier"] = team_id
     return {
         "AppIDName": "RufatGram",
         "ApplicationIdentifierPrefix": [team_id],
@@ -102,13 +155,7 @@ def build_profile(team_id, bundle_id, suffix, der):
         # be plist <date> values, not strings.
         "CreationDate": datetime.datetime(2024, 1, 1),
         "DeveloperCertificates": [der],
-        "Entitlements": {
-            "application-identifier": identifier,
-            "aps-environment": "production",
-            "com.apple.developer.team-identifier": team_id,
-            "get-task-allow": False,
-            "keychain-access-groups": ["{}.{}".format(team_id, bundle_id)],
-        },
+        "Entitlements": entitlements,
         "ExpirationDate": datetime.datetime(2034, 1, 1),
         "Name": "RufatGram Prototype {}".format(suffix or "App"),
         "Platform": ["iOS"],
@@ -141,6 +188,8 @@ def main():
     parser.add_argument("--configuration", required=True)
     parser.add_argument("--certificates", required=True,
                         help="Directory with the placeholder .p12 and .cer files")
+    parser.add_argument("--templates", default="build-system/fake-codesigning/profiles",
+                        help="Directory with the upstream fake profiles used as entitlement templates")
     parser.add_argument("--output", required=True)
     arguments = parser.parse_args()
 
@@ -175,7 +224,8 @@ def main():
                             os.path.join(certs_dir, name))
 
         for name, suffix in SUFFIXES.items():
-            profile = build_profile(team_id, bundle_id, suffix, der)
+            entitlements = template_entitlements(arguments.templates, name, team_id, bundle_id)
+            profile = build_profile(team_id, bundle_id, suffix, der, entitlements)
             write_signed_profile(profile, os.path.join(profiles_dir, name + ".mobileprovision"),
                                  workdir, cert_path, key_path)
 
