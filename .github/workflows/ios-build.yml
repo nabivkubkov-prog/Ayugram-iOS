@@ -194,14 +194,19 @@ jobs:
           COUNT="$(git rev-list --count HEAD)"
           echo "number=$((COUNT + OFFSET))" >> "$GITHUB_OUTPUT"
 
-      - name: Restore Bazel repository cache
-        uses: actions/cache@v4
+      # actions/cache only saves after a successful job, so every failed build
+      # started from scratch. Restore and save separately; the save step runs
+      # even when the build fails. Keys are immutable, hence the run id suffix.
+      - name: Restore Bazel cache
+        id: bazel-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ${{ env.BAZEL_CACHE_DIR }}
             ~/.cache/bazel
-          key: bazel-${{ runner.os }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}
+          key: bazel-${{ runner.os }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}-${{ github.run_id }}
           restore-keys: |
+            bazel-${{ runner.os }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}-
             bazel-${{ runner.os }}-
 
       - name: Build the app
@@ -228,6 +233,15 @@ jobs:
             --buildNumber="${{ steps.buildnum.outputs.number }}" \
             --enableParallelSwiftmoduleGeneration \
             --outputBuildArtifactsPath="$PWD/build/artifacts"
+
+      - name: Save Bazel cache
+        if: always() && steps.build.outcome != 'skipped'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.BAZEL_CACHE_DIR }}
+            ~/.cache/bazel
+          key: ${{ steps.bazel-cache.outputs.cache-primary-key }}
 
       - name: Verify produced IPA
         if: always() && steps.build.outcome == 'success'
