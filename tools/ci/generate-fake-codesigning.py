@@ -22,6 +22,7 @@ Usage:
 """
 
 import argparse
+import datetime
 import json
 import os
 import plistlib
@@ -97,7 +98,9 @@ def build_profile(team_id, bundle_id, suffix, der):
     return {
         "AppIDName": "RufatGram",
         "ApplicationIdentifierPrefix": [team_id],
-        "CreationDate": "2024-01-01T00:00:00Z",
+        # plisttool compares ExpirationDate with a naive datetime, so these must
+        # be plist <date> values, not strings.
+        "CreationDate": datetime.datetime(2024, 1, 1),
         "DeveloperCertificates": [der],
         "Entitlements": {
             "application-identifier": identifier,
@@ -106,7 +109,7 @@ def build_profile(team_id, bundle_id, suffix, der):
             "get-task-allow": False,
             "keychain-access-groups": ["{}.{}".format(team_id, bundle_id)],
         },
-        "ExpirationDate": "2034-01-01T00:00:00Z",
+        "ExpirationDate": datetime.datetime(2034, 1, 1),
         "Name": "RufatGram Prototype {}".format(suffix or "App"),
         "Platform": ["iOS"],
         "ProvisionedDevices": [],
