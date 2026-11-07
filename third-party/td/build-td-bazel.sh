@@ -27,26 +27,36 @@ cmake --build . -- -j$(sysctl -n hw.ncpu)
 cd ..
 
 if [ "$ARCH" = "arm64" ]; then
-  IOS_PLATFORMDIR="$(xcode-select -p)/Platforms/iPhoneOS.platform"
-  IOS_SYSROOT=($IOS_PLATFORMDIR/Developer/SDKs/iPhoneOS*.sdk)
+  IOS_SYSROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
   export CFLAGS="-arch arm64 --target=arm64-apple-ios13.0 -miphoneos-version-min=13.0"
 elif [ "$ARCH" = "sim_arm64" ]; then
-  IOS_PLATFORMDIR="$(xcode-select -p)/Platforms/iPhoneSimulator.platform"
-  IOS_SYSROOT=($IOS_PLATFORMDIR/Developer/SDKs/iPhoneSimulator*.sdk)
+  IOS_SYSROOT="$(xcrun --sdk iphonesimulator --show-sdk-path)"
   export CFLAGS="-arch arm64 --target=arm64-apple-ios13.0-simulator -miphonesimulator-version-min=13.0"
 else
   echo "Unsupported architecture $ARCH"
   exit 1
 fi
 
+# TD and FindAtomics compile C++. CFLAGS alone leaves them targeting the
+# host architecture (x86_64 on Intel runners) against an arm64 iPhone SDK.
+# Set these only after building the generators, which must run on macOS.
+export CXXFLAGS="$CFLAGS"
+
 # Common build steps
 mkdir build
 cd build
 
-touch toolchain.cmake
-echo "set(CMAKE_SYSTEM_NAME Darwin)" >> toolchain.cmake
+echo "set(CMAKE_SYSTEM_NAME Darwin)" > toolchain.cmake
 echo "set(CMAKE_SYSTEM_PROCESSOR aarch64)" >> toolchain.cmake
-echo "set(CMAKE_C_COMPILER $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)" >> toolchain.cmake
+echo "set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING \"\")" >> toolchain.cmake
+echo "set(CMAKE_C_COMPILER \"$(xcrun --find clang)\")" >> toolchain.cmake
+echo "set(CMAKE_CXX_COMPILER \"$(xcrun --find clang++)\")" >> toolchain.cmake
 
-cmake -G"Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_OSX_SYSROOT=${IOS_SYSROOT[0]} ../td $options
+if ! cmake -G"Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_OSX_SYSROOT="$IOS_SYSROOT" ../td $options; then
+  # Bazel does not otherwise include the failed compiler probes in its log.
+  if [ -f CMakeFiles/CMakeError.log ]; then
+    cat CMakeFiles/CMakeError.log >&2
+  fi
+  exit 1
+fi
 make tde2e -j$(sysctl -n hw.ncpu)

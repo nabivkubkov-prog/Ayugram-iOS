@@ -103,8 +103,6 @@ jobs:
 
     env:
       CI: '1'
-      # Pinned by versions.json; validated below instead of silently overriding.
-      BAZEL_CACHE_DIR: ${{ github.workspace }}/../bazel-cache
       GIT_LFS_SKIP_SMUDGE: '1'
 
     steps:
@@ -129,6 +127,9 @@ jobs:
           print(f"macos={v['macos']}")
           PY
           cat "$GITHUB_OUTPUT"
+          # actions/cache rejects paths containing '..'. Resolve the directory
+          # at runtime, outside the source tree, before restoring the cache.
+          echo "BAZEL_CACHE_DIR=$RUNNER_TEMP/bazel-cache" >> "$GITHUB_ENV"
 
       - name: Select Xcode ${{ steps.versions.outputs.xcode }}
         run: |
