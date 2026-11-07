@@ -7,7 +7,7 @@ public enum AyuForwardError: Error {
 }
 
 private func ayuForwardLocalResource(account: Account, message: Message, media: Media, resource: TelegramMediaResource) -> Signal<LocalFileMediaResource, AyuForwardError> {
-    return Signal { subscriber in
+    return Signal<LocalFileMediaResource, AyuForwardError> { subscriber in
         let disposables = DisposableSet()
         let reference = MediaResourceReference.media(media: .message(message: MessageReference(message), media: media), resource: resource)
         disposables.add(fetchedMediaResource(mediaBox: account.postbox.mediaBox, userLocation: .peer(message.id.peerId), userContentType: .other, reference: reference).start(error: { _ in
@@ -30,6 +30,7 @@ private func ayuForwardLocalResource(account: Account, message: Message, media: 
         }))
         return disposables
     }
+    |> timeout(600.0, queue: Queue.concurrentDefaultQueue(), alternate: .fail(.downloadFailed))
 }
 
 private func ayuForwardMedia(account: Account, message: Message) -> Signal<AnyMediaReference?, AyuForwardError> {
@@ -46,7 +47,11 @@ private func ayuForwardMedia(account: Account, message: Message) -> Signal<AnyMe
                 let copy = TelegramMediaFile(fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: Int64.random(in: Int64.min ... Int64.max)), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: file.immediateThumbnailData, mimeType: file.mimeType, size: file.size, attributes: file.attributes, alternativeRepresentations: [])
                 return .standalone(media: copy)
             }
-        } else if media is TelegramMediaContact || media is TelegramMediaMap {
+        } else if let location = media as? TelegramMediaMap {
+            // Copy the received position, never start a new live-location broadcast.
+            let copy = TelegramMediaMap(latitude: location.latitude, longitude: location.longitude, heading: location.heading, accuracyRadius: location.accuracyRadius, venue: location.venue, address: location.address, liveBroadcastingTimeout: nil, liveProximityNotificationRadius: nil)
+            return .single(.standalone(media: copy))
+        } else if media is TelegramMediaContact {
             return .single(.standalone(media: media))
         } else if media is TelegramMediaWebpage {
             // The destination generates a new preview from the copied text.
@@ -60,9 +65,15 @@ private func ayuForwardMedia(account: Account, message: Message) -> Signal<AnyMe
 
 /// Copies received content as new messages, reuploading cloud files instead of
 /// forwarding a protected message or reusing its protected cloud-media reference.
-public func ayuForwardMessages(account: Account, messages: [Message], to peerId: PeerId) -> Signal<[MessageId?], AyuForwardError> {
+public func ayuForwardMessages(account: Account, messages: [Message], to peerId: PeerId, threadId: Int64? = nil) -> Signal<[MessageId?], AyuForwardError> {
     let messages = messages.sorted { $0.index < $1.index }
     guard !messages.isEmpty && messages.count <= 100 else { return .fail(.unsupportedContent) }
+    var groupingKeys: [Int64: Int64] = [:]
+    for message in messages {
+        if let key = message.groupingKey, groupingKeys[key] == nil {
+            groupingKeys[key] = Int64.random(in: Int64.min ... Int64.max)
+        }
+    }
     var prepared: Signal<[EnqueueMessage], AyuForwardError> = .single([])
     for message in messages {
         guard message.id.peerId.namespace != Namespaces.Peer.SecretChat,
@@ -74,7 +85,7 @@ public func ayuForwardMessages(account: Account, messages: [Message], to peerId:
                 var attributes: [MessageAttribute] = []
                 if let entities = message.textEntitiesAttribute { attributes.append(entities) }
                 if message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) { attributes.append(MediaSpoilerMessageAttribute()) }
-                let copy = EnqueueMessage.message(text: message.text, attributes: attributes, inlineStickers: [:], mediaReference: media, threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: message.groupingKey, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+                let copy = EnqueueMessage.message(text: message.text, attributes: attributes, inlineStickers: [:], mediaReference: media, threadId: threadId, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: message.groupingKey.flatMap { groupingKeys[$0] }, correlationId: nil, bubbleUpEmojiOrStickersets: [])
                 return previous + [copy]
             }
         }

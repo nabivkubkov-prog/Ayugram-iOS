@@ -7,16 +7,17 @@ import AccountContext
 import TelegramPresentationData
 import PresentationDataUtils
 
-public func ayuShareMessageImage(view: UIView, controller: ViewController) {
-    guard view.bounds.width > 0.0 && view.bounds.height > 0.0 else { return }
-    let format = UIGraphicsImageRendererFormat()
-    format.scale = min(UIScreen.main.scale, 3.0)
-    let image = UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { context in
-        view.layer.render(in: context.cgContext)
+public func ayuShareMessageImage(context: AccountContext, image: UIImage?, controller: ViewController) {
+    guard controller.isViewLoaded, controller.view.window != nil else { return }
+    guard let image = image, image.size.width > 0.0, image.size.height > 0.0 else {
+        let russian = context.sharedContext.currentPresentationData.with { $0.strings.baseLanguageCode.hasPrefix("ru") }
+        controller.present(textAlertController(context: context, title: russian ? "Снимок сообщения" : "Message Shot", text: russian ? "Не удалось создать снимок этого сообщения. Дождитесь загрузки содержимого и повторите." : "Could not capture this message. Wait for its content to load and try again.", actions: [TextAlertAction(type: .defaultAction, title: "OK", action: {})]), in: .window(.root))
+        return
     }
     let share = UIActivityViewController(activityItems: [image], applicationActivities: nil)
     share.popoverPresentationController?.sourceView = controller.view
     share.popoverPresentationController?.sourceRect = CGRect(x: controller.view.bounds.midX, y: controller.view.bounds.midY, width: 1.0, height: 1.0)
+    share.popoverPresentationController?.permittedArrowDirections = []
     controller.present(share, animated: true)
 }
 

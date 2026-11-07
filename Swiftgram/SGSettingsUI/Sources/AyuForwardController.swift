@@ -11,18 +11,24 @@ import OverlayStatusController
 
 public func ayuPresentForward(context: AccountContext, messages: [Message], controller: ViewController) {
     let russian = context.sharedContext.currentPresentationData.with { $0.strings.baseLanguageCode.hasPrefix("ru") }
-    let picker = context.sharedContext.makePeerSelectionController(PeerSelectionControllerParams(context: context, filter: [.onlyWriteable, .excludeSecretChats, .doNotSearchMessages], title: "AyuForward"))
-    picker.peerSelected = { [weak picker] peer, _ in
+    let picker = context.sharedContext.makePeerSelectionController(PeerSelectionControllerParams(context: context, filter: [.onlyWriteable, .excludeSecretChats, .doNotSearchMessages], title: "AyuForward", selectForumThreads: true))
+    picker.peerSelected = { [weak picker] peer, threadId in
         guard let picker = picker else { return }
         let disposable = MetaDisposable()
-        let progress = OverlayStatusController(style: .dark, type: .loading(cancelled: { disposable.dispose() }))
+        weak var progressReference: ViewController?
+        let progress = OverlayStatusController(style: .dark, type: .loading(cancelled: {
+            disposable.dispose()
+            progressReference?.dismiss()
+        }))
+        progressReference = progress
         picker.present(progress, in: .window(.root))
-        disposable.set((ayuForwardMessages(account: context.account, messages: messages, to: peer.id)
+        disposable.set((ayuForwardMessages(account: context.account, messages: messages, to: peer.id, threadId: threadId)
         |> deliverOnMainQueue).start(next: { ids in
             progress.dismiss()
-            let text = ids.contains(where: { $0 != nil })
+            let count = ids.compactMap { $0 }.count
+            let text = count == messages.count
                 ? (russian ? "Копия добавлена в очередь отправки." : "The copy was added to the send queue.")
-                : (russian ? "Не удалось добавить сообщения в очередь." : "Could not enqueue the messages.")
+                : (russian ? "Добавлено сообщений: \(count) из \(messages.count). Остальные не удалось подготовить." : "Enqueued \(count) of \(messages.count) messages. The remaining messages could not be prepared.")
             picker.present(textAlertController(context: context, title: "AyuForward", text: text, actions: [TextAlertAction(type: .defaultAction, title: "OK", action: { picker.dismiss() })]), in: .window(.root))
         }, error: { error in
             progress.dismiss()

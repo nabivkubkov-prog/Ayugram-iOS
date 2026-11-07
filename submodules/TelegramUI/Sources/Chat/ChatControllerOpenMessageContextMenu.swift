@@ -76,10 +76,26 @@ extension ChatControllerImpl {
                         if !message.media.contains(where: { $0 is TelegramMediaAction }) {
                             itemList.append(.action(ContextMenuActionItem(text: russian ? "Снимок сообщения" : "Message Shot", icon: { theme in
                                 return generateTintedImage(image: UIImage(systemName: "camera"), color: theme.actionSheet.primaryTextColor)
-                            }, action: { [weak self] _, complete in
-                                complete(.default)
-                                guard let self = self else { return }
-                                ayuShareMessageImage(view: node.view, controller: self)
+                            }, action: { [weak self] contextController, complete in
+                                // The context menu has extracted the bubble from the row.
+                                // Capture its own content before dismissing the extraction.
+                                var image: UIImage?
+                                if let messageNode = node as? ChatMessageItemView {
+                                    let frame = messageNode.contentFrame()
+                                    if frame.width.isFinite && frame.height.isFinite && frame.width > 0.0 && frame.height > 0.0 {
+                                        image = messageNode.makeContentSnapshot()?.0
+                                    }
+                                }
+                                let presentShot: () -> Void = { [weak self] in
+                                    guard let self = self else { return }
+                                    ayuShareMessageImage(context: self.context, image: image, controller: self)
+                                }
+                                if let contextController = contextController {
+                                    contextController.dismiss(result: .default, completion: presentShot)
+                                } else {
+                                    complete(.default)
+                                    DispatchQueue.main.async(execute: presentShot)
+                                }
                             })))
                             itemList.append(.action(ContextMenuActionItem(text: russian ? "Сведения о сообщении" : "Message Details", icon: { theme in
                                 return generateTintedImage(image: UIImage(systemName: "info.circle"), color: theme.actionSheet.primaryTextColor)

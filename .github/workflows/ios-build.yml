@@ -124,14 +124,17 @@ jobs:
           xcode-select -p
 
       - name: Install simulator runtimes for the selected Xcode
+        timeout-minutes: 45
         run: |
           set -euo pipefail
           # actool/ibtool need simulator runtimes matching the SDKs of the selected
           # Xcode (Watch asset catalog, LaunchScreen.xib); runner images only ship
           # newer runtimes.
           xcrun simctl list runtimes
-          xcodebuild -downloadPlatform iOS
-          xcodebuild -downloadPlatform watchOS
+          # Match the actual successful build, rather than downloading whichever
+          # runtime Apple marks latest on the day the workflow runs.
+          python3 tools/ci/install-simulator-runtimes.py \
+            --runtime iOS=18.3.1 --runtime watchOS=11.2
           xcrun simctl list runtimes
           df -h "$GITHUB_WORKSPACE"
 

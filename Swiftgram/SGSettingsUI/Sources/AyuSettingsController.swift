@@ -103,6 +103,7 @@ public func ayuSettingsController(context: AccountContext) -> ViewController {
         toggle(.interactions, .readOnSend, ghost.readOnSend, "Mark Read When Sending", "Прочитывать при отправке")
         toggle(.interactions, .readOnReaction, ghost.readOnReaction, "Mark Read When Reacting", "Прочитывать при реакции")
         toggle(.interactions, .readOnPoll, ghost.readOnPoll, "Mark Read When Voting", "Прочитывать при голосовании")
+        entries.append(.notice(id: id.count, section: .interactions, text: ayuText(ru, "Sending or reacting marks the chat read when you perform the action, even if delivery later fails. Voting marks it read after the server accepts your vote. A chat's Never Send rule takes priority.", "Отправка и реакция отмечают чат прочитанным в момент действия, даже если доставка затем не удастся. Голосование — после принятия голоса сервером. Правило чата «никогда» имеет приоритет.")))
         toggle(.interactions, .offlineAfterSend, ghost.offlineAfterSend, "Restore Offline Status Automatically", "Автоматически возвращаться офлайн")
         toggle(.interactions, .scheduled, ghost.useScheduledMessages, "Scheduled Sending in Ghost Mode", "Отложенная отправка в режиме призрака")
         toggle(.interactions, .silent, ghost.silentSendInGhostMode, "Silent Sending in Ghost Mode", "Без звука в режиме призрака")
