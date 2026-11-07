@@ -161,6 +161,12 @@ class BuildEnvironmentVersions:
                 bazel_version, bazel_version_sha256 = configuration_dict['bazel'].split(':')
                 self.bazel_version = bazel_version
                 self.bazel_version_sha256 = bazel_version_sha256
+                architecture_hashes = configuration_dict.get('bazel_sha256')
+                if architecture_hashes is not None:
+                    arch = 'darwin-arm64' if is_apple_silicon() else 'darwin-x86_64'
+                    if arch not in architecture_hashes:
+                        raise ValueError('Missing Bazel SHA256 for {}'.format(arch))
+                    self.bazel_version_sha256 = architecture_hashes[arch]
             if configuration_dict['xcode'] is None:
                 raise Exception('Missing xcode version in {}'.format(configuration_path))
             else:

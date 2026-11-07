@@ -97,7 +97,7 @@ jobs:
   build:
     needs: [checks, swift-checks]
     if: github.event_name != 'pull_request' && inputs.checks_only != true
-    # Preserve the Intel host architecture of the previously verified build.
+    # Keep the host architecture explicit; Bazel has a separate checksum for it.
     runs-on: macos-15-intel
     timeout-minutes: 360
 
@@ -206,6 +206,35 @@ jobs:
           test -f "$CONFIG"
           echo "path=$CONFIG" >> "$GITHUB_OUTPUT"
 
+      # actions/cache only saves after a successful job, so every failed build
+      # started from scratch. Restore and save separately; the save step runs
+      # even when the build fails. Keys are immutable, hence the run id suffix.
+      - name: Restore Bazel cache
+        id: bazel-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.BAZEL_CACHE_DIR }}
+            ~/.cache/bazel
+          key: bazel-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            bazel-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}-
+
+      - name: Verify Bazel download and host architecture
+        run: |
+          python3 - <<'PY'
+          import os, platform, sys
+          sys.path.insert(0, "build-system/Make")
+          from BazelLocation import locate_bazel
+          from BuildEnvironment import BuildEnvironmentVersions, get_bazel_version
+          expected = BuildEnvironmentVersions(os.getcwd()).bazel_version
+          executable = locate_bazel(os.getcwd(), None, os.environ["BAZEL_CACHE_DIR"])
+          actual = get_bazel_version(executable)
+          if actual != expected:
+              raise SystemExit(f"::error::Expected Bazel {expected}, got {actual}")
+          print(f"Verified Bazel {actual} for {platform.machine()}")
+          PY
+
       - name: Install simulator runtimes for the selected Xcode
         timeout-minutes: 45
         run: |
@@ -282,20 +311,6 @@ jobs:
           OFFSET="$(cat build_number_offset)"
           COUNT="$(git rev-list --count HEAD)"
           echo "number=$((COUNT + OFFSET))" >> "$GITHUB_OUTPUT"
-
-      # actions/cache only saves after a successful job, so every failed build
-      # started from scratch. Restore and save separately; the save step runs
-      # even when the build fails. Keys are immutable, hence the run id suffix.
-      - name: Restore Bazel cache
-        id: bazel-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ${{ env.BAZEL_CACHE_DIR }}
-            ~/.cache/bazel
-          key: bazel-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}-${{ github.run_id }}
-          restore-keys: |
-            bazel-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}-
 
       - name: Build the app
         id: build
@@ -431,5 +446,5 @@ jobs:
       - name: Report failure details
         if: failure()
         run: |
-          echo "::error::Build failed. Inspect the 'Build the app' step above; Bazel writes the real error before this banner."
+          echo "::error::Build pipeline failed. Inspect the first failed step above. Compiler diagnostics appear in the build log once compilation has started."
           echo "Common causes: Xcode version mismatch (versions.json vs runner image), missing submodule, disk space, or a signing profile whose application-identifier does not start with <TEAM_ID>.<BUNDLE_ID>."

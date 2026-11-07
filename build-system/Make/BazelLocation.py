@@ -61,7 +61,7 @@ def locate_bazel(base_path, cache_host_or_path, cache_dir):
     if not os.path.isdir(build_input_dir):
         os.mkdir(build_input_dir)
 
-    versions = BuildEnvironmentVersions(base_path=os.getcwd())
+    versions = BuildEnvironmentVersions(base_path=base_path)
     if is_apple_silicon():
         arch = 'darwin-arm64'
     else:
@@ -90,7 +90,7 @@ def locate_bazel(base_path, cache_host_or_path, cache_dir):
                 test_sha256 = calculate_sha256(temp_output_file.name)
                 if test_sha256 == versions.bazel_version_sha256:
                     shutil.copyfile(temp_output_file.name, bazel_path)
-        elif resolved_cache_path is not None:
+        elif resolved_cache_path is not None and versions.bazel_version_sha256 is not None:
             (cache_cas_id, cache_cas_name_value) = cache_cas_name(versions.bazel_version_sha256)
             cached_path = '{}/cas/{}/{}'.format(resolved_cache_path, cache_cas_id, cache_cas_name_value)
             if os.path.isfile(cached_path):
@@ -107,6 +107,10 @@ def locate_bazel(base_path, cache_host_or_path, cache_dir):
     if not os.path.isfile(bazel_path):
         call_executable([
             'curl',
+            '--fail',
+            '--retry', '3',
+            '--connect-timeout', '30',
+            '--max-time', '300',
             '-L',
             'https://github.com/bazelbuild/bazel/releases/download/{version}/{name}'.format(
                 version=versions.bazel_version,
@@ -119,8 +123,12 @@ def locate_bazel(base_path, cache_host_or_path, cache_dir):
         if os.path.isfile(bazel_path) and versions.bazel_version_sha256 is not None:
             test_sha256 = calculate_sha256(bazel_path)
             if test_sha256 != versions.bazel_version_sha256:
-                print(f"Bazel at {bazel_path} does not match SHA256 {versions.bazel_version_sha256}, removing")
                 os.remove(bazel_path)
+                raise RuntimeError(
+                    f"Bazel checksum mismatch for {bazel_name}: expected "
+                    f"{versions.bazel_version_sha256}, got {test_sha256}. "
+                    "The rejected binary was removed and was not cached."
+                )
 
         if resolved_cache_host is not None and versions.bazel_version_sha256 is not None:
             http_cache_host = transform_cache_host_into_http(resolved_cache_host)
@@ -136,7 +144,7 @@ def locate_bazel(base_path, cache_host_or_path, cache_dir):
                     hash=versions.bazel_version_sha256
                 )
             ], check_result=False)
-        elif resolved_cache_path is not None:
+        elif resolved_cache_path is not None and versions.bazel_version_sha256 is not None:
             (cache_cas_id, cache_cas_name_value) = cache_cas_name(versions.bazel_version_sha256)
             cached_path = '{}/cas/{}/{}'.format(resolved_cache_path, cache_cas_id, cache_cas_name_value)
             os.makedirs(os.path.dirname(cached_path), exist_ok=True)

@@ -2,5 +2,9 @@
     "app": "12.0",
     "xcode": "16.2",
     "bazel": "8.3.1:0cac3a67dc5429c68272dc6944104952e9e4cf84b29d126a5ff3fbaa59045217",
+    "bazel_sha256": {
+        "darwin-arm64": "0cac3a67dc5429c68272dc6944104952e9e4cf84b29d126a5ff3fbaa59045217",
+        "darwin-x86_64": "0425c87f4d540fdf292b5a77d70401fb5e7a52165956a9e522bebe46acb6e1b2"
+    },
     "macos": "15"
 }

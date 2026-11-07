@@ -18,13 +18,19 @@ Xcode 16.2, Bazel 8.3.1. **Полное соответствие Android APK п�
 | Полный unsigned target `9e34d3a` | [FAIL, run 42368544169](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42368544169) | Checks, swift-checks и установка обеих simulator runtime PASS. Подготовка конфигурации остановилась до компиляции: Bash 3.2 сообщил `EXTRA_ARGS[@]: unbound variable` для пустого массива. |
 | Исправления CI и импорта, `f2531a7` | [checks и swift-checks PASS, run 42370628388](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42370628388) | Ошибка Bash устранена. Обе попытки полной сборки остановились до компиляции: `RUFATGRAM_API_ID must be a positive 32-bit integer`. |
 | Проверка текущих Secrets, `c591f9f` | [FAIL, run 42371780969](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42371780969) | Новый запуск после обновления Secrets также обнаружил недопустимый формат `RUFATGRAM_API_ID`. Проверка выполняется на Linux до полной macOS-сборки; значения секретов не выводятся и не сохраняются. |
+| Исправленный API ID, `5e2e462` | [FAIL, run 42372134002](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42372134002) | API ID теперь проходит проверку. Следующая проверка обнаружила недопустимый формат `RUFATGRAM_API_HASH`: требуется ровно 32 hex-символа. Swift-checks PASS, полная сборка пропущена. |
+| Обновлённые API ID и hash, `5e2e462` | [FAIL, run 42372694524](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42372694524) | Checks, Swift-checks, конфигурация, simulator runtimes и временная подпись PASS. Загрузчик Bazel отклонил Intel binary, сравнив его с ARM64 SHA256. До компиляции Swift запуск не дошёл. |
 | Подпись, установка, запуск, login, APNs | NOT RUN | Нужны API credentials, действующая подпись/capabilities и устройство. |
 | Два аккаунта: read/typing/online/story; deletion/edit/cache clearing | NOT RUN | Сценарии в [DEVICE_TEST_MATRIX.md](DEVICE_TEST_MATRIX.md). Policy unit test не подтверждает отсутствие реального RPC. |
 
 Функциональные изменения, включая lifecycle AyuForward, forum destinations,
 album keys и Message Shot, а также исправление импорта на экране оформления,
-прошли Swift parse в `f2531a7`. Текущую полную сборку блокирует формат API ID:
-нужен числовой **App api_id** из `my.telegram.org/apps`, без кавычек и `api_id=`.
+прошли Swift parse в `f2531a7`. API ID и hash исправлены, их формат проверен
+новым запуском 42372694524. Это не проверка авторизации в Telegram.
+Последующая правка добавляет отдельные официальные SHA256 Bazel 8.3.1 для Intel
+и Apple Silicon, прекращает работу с явной ошибкой после несовпадения checksum и
+проверяет Bazel перед загрузкой runtime. Локально прошли 20 Python-тестов, включая
+7 сценариев архитектуры/кэша/неверной загрузки. Полный новый запуск ещё требуется.
 Готового нового IPA нет. Parse и standalone model/policy tests не заменяют
 полную компиляцию зависимых модулей и проверку на устройстве.
 
