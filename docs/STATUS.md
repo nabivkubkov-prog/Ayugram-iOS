@@ -16,15 +16,17 @@ Xcode 16.2, Bazel 8.3.1. **Полное соответствие Android APK п�
 | Проверки текущего `9e34d3a`, включая исправления review | [checks-only run 42369014085 SUCCESS](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42369014085) | [Swift job](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42369014085/job/128393063327): 56 Swift-файлов разобраны без ошибок; 37 ghost, 30 filter, 56 history, 11 appearance проверок PASS. [Linux job](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42369014085/job/128393063424): 13 Python тестов PASS. |
 | Полный unsigned target, `8392ed8` | CANCELLED, run 42367696167 | Остановлен для перехода к текущему коммиту. Лог подтвердил завершение установки iOS и переход watchOS с 99,1% к установке; зависание не доказано. До компиляции приложения запуск не дошёл. |
 | Полный unsigned target `9e34d3a` | [FAIL, run 42368544169](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42368544169) | Checks, swift-checks и установка обеих simulator runtime PASS. Подготовка конфигурации остановилась до компиляции: Bash 3.2 сообщил `EXTRA_ARGS[@]: unbound variable` для пустого массива. |
+| Исправления CI и импорта, `f2531a7` | [checks и swift-checks PASS, run 42370628388](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42370628388) | Ошибка Bash устранена. Обе попытки полной сборки остановились до компиляции: `RUFATGRAM_API_ID must be a positive 32-bit integer`. |
+| Проверка текущих Secrets, `c591f9f` | [FAIL, run 42371780969](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions/runs/42371780969) | Новый запуск после обновления Secrets также обнаружил недопустимый формат `RUFATGRAM_API_ID`. Проверка выполняется на Linux до полной macOS-сборки; значения секретов не выводятся и не сохраняются. |
 | Подпись, установка, запуск, login, APNs | NOT RUN | Нужны API credentials, действующая подпись/capabilities и устройство. |
 | Два аккаунта: read/typing/online/story; deletion/edit/cache clearing | NOT RUN | Сценарии в [DEVICE_TEST_MATRIX.md](DEVICE_TEST_MATRIX.md). Policy unit test не подтверждает отсутствие реального RPC. |
 
 Функциональные изменения, включая lifecycle AyuForward, forum destinations,
-album keys и Message Shot, входят в `9e34d3a` и прошли Swift parse. Последующая
-правка убирает пустой массив из CI, переносит подготовку конфигурации перед загрузкой
-runtime и добавляет пропущенный импорт SGSimpleSettings на экране оформления.
-Она требует нового полного запуска. Parse и standalone model/policy tests не
-заменяют полную компиляцию зависимых модулей и проверку на устройстве.
+album keys и Message Shot, а также исправление импорта на экране оформления,
+прошли Swift parse в `f2531a7`. Текущую полную сборку блокирует формат API ID:
+нужен числовой **App api_id** из `my.telegram.org/apps`, без кавычек и `api_id=`.
+Готового нового IPA нет. Parse и standalone model/policy tests не заменяют
+полную компиляцию зависимых модулей и проверку на устройстве.
 
 ## Реализация и evidence
 
