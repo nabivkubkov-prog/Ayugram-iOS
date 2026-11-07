@@ -391,6 +391,7 @@ func applyUpdateGroupMessages(postbox: Postbox, stateManager: AccountStateManage
     guard !messages.isEmpty else {
         return .single(Void())
     }
+    ayuRestoreOfflineAfterSend(network: stateManager.network)
     
     return postbox.transaction { transaction -> Void in
         let updatedRawMessageIds = result.updatedRawMessageIds

@@ -1305,6 +1305,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     
     var item: ChatListItem?
     
+    private var ayuAppearanceObserver: NSObjectProtocol?
+    private var ayuListMask: UILabel?
     private let backgroundNode: ASDisplayNode
     private let highlightedBackgroundNode: ASDisplayNode
     
@@ -1419,6 +1421,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     
     override public var accessibilityLabel: String? {
         get {
+            if AyuAppearanceSettings.shared.hideChatList { return "AyuGram" }
             guard let item = self.item else {
                 return nil
             }
@@ -1453,6 +1456,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     
     override public var accessibilityValue: String? {
         get {
+            if AyuAppearanceSettings.shared.hideChatList { return nil }
             guard let item = self.item else {
                 return nil
             }
@@ -1678,6 +1682,9 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
         self.mainContentContainerNode.addSubnode(self.mentionBadgeNode)
         self.mainContentContainerNode.addSubnode(self.mutedIconNode)
         
+        self.ayuAppearanceObserver = NotificationCenter.default.addObserver(forName: .ayuAppearanceChanged, object: nil, queue: .main) { [weak self] _ in
+            self?.updateAyuListMask()
+        }
         self.peerPresenceManager = PeerPresenceStatusManager(update: { [weak self] in
             if let strongSelf = self, let layoutParams = strongSelf.layoutParams {
                 let (_, apply) = strongSelf.asyncLayout()(layoutParams.0, layoutParams.5, layoutParams.1, layoutParams.2, layoutParams.3, layoutParams.4)
@@ -1686,6 +1693,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
         })
         
         self.contextContainer.shouldBegin = { [weak self] location in
+            if AyuAppearanceSettings.shared.hideChatList { return false }
             guard let strongSelf = self, let item = strongSelf.item else {
                 return false
             }
@@ -1732,10 +1740,45 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     }
     
     deinit {
+        if let observer = self.ayuAppearanceObserver { NotificationCenter.default.removeObserver(observer) }
         self.cachedDataDisposable.dispose()
+    }
+
+    private func updateAyuListMask() {
+        guard let item = self.item, let height = self.currentItemHeight, let params = self.layoutParams else { return }
+        if AyuAppearanceSettings.shared.hideChatList {
+            let label: UILabel
+            if let current = self.ayuListMask {
+                label = current
+            } else {
+                label = UILabel()
+                label.isUserInteractionEnabled = false
+                label.isAccessibilityElement = false
+                label.textAlignment = .center
+                label.font = .systemFont(ofSize: 16.0, weight: .medium)
+                label.layer.zPosition = 1000.0
+                self.view.addSubview(label)
+                self.ayuListMask = label
+            }
+            label.text = item.presentationData.strings.baseLanguageCode == "ru" ? "Чат скрыт" : "Chat hidden"
+            label.backgroundColor = item.presentationData.theme.chatList.itemBackgroundColor.withAlphaComponent(1.0)
+            label.textColor = item.presentationData.theme.chatList.messageTextColor
+            label.frame = CGRect(x: 0.0, y: 0.0, width: params.5.width, height: height - UIScreenPixel)
+            self.view.bringSubviewToFront(label)
+            self.avatarTapRecognizer?.isEnabled = false
+            self.contextContainer.view.accessibilityElementsHidden = true
+        } else {
+            self.ayuListMask?.removeFromSuperview()
+            self.ayuListMask = nil
+            self.avatarTapRecognizer?.isEnabled = item.interaction.inlineNavigationLocation == nil
+            self.contextContainer.view.accessibilityElementsHidden = false
+        }
+        self.view.accessibilityLabel = self.accessibilityLabel
+        self.view.accessibilityValue = self.accessibilityValue
     }
     
     override public func secondaryAction(at point: CGPoint) {
+        if AyuAppearanceSettings.shared.hideChatList { return }
         guard let item = self.item else {
             return
         }
@@ -5057,6 +5100,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         strongSelf.placeholderNode = nil
                         shimmerNode.removeFromSupernode()
                     }
+                    strongSelf.updateAyuListMask()
                 }
             })
         }

@@ -6783,6 +6783,16 @@ private final class ChatListLocationContext {
         }
         #endif
         
+        let ayuGhostChanges = Signal<Void, NoError> { subscriber in
+            subscriber.putNext(())
+            let observer = NotificationCenter.default.addObserver(forName: .ayuGhostSettingsChanged, object: nil, queue: nil) { _ in
+                subscriber.putNext(())
+            }
+            return ActionDisposable { NotificationCenter.default.removeObserver(observer) }
+        }
+        let ayuPresentationData = combineLatest(parentController.updatedPresentationData.1, ayuGhostChanges)
+        |> map { data, _ in data }
+
         switch location {
         case .chatList:
             if !hideNetworkActivityStatus {
@@ -6794,7 +6804,7 @@ private final class ChatListLocationContext {
                     containerNode.currentItemState,
                     isReorderingTabs,
                     peerStatus,
-                    parentController.updatedPresentationData.1,
+                    ayuPresentationData,
                     storyPostingAvailable
                 ).startStrict(next: { [weak self] hideStories, networkState, proxy, passcode, stateAndFilterId, isReorderingTabs, peerStatus, presentationData, storyPostingAvailable in
                     guard let self else {
@@ -7041,7 +7051,7 @@ private final class ChatListLocationContext {
         presentationData: PresentationData,
         storyPostingAvailable: Bool
     ) {
-        let defaultTitle: String
+        var defaultTitle: String
         switch location {
         case let .chatList(groupId):
             if groupId == .root {
@@ -7053,6 +7063,9 @@ private final class ChatListLocationContext {
             defaultTitle = ""
         case .savedMessagesChats:
             defaultTitle = ""
+        }
+        if case .chatList = location, SGSimpleSettings.shared.ayuGhostSettings(accountPath: context.account.basePath).isEnabled {
+            defaultTitle += " 👻"
         }
         let previousEditingAndNetworkState = self.previousEditingAndNetworkStateValue.swap((stateAndFilterId.state.editing, networkState))
         

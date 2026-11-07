@@ -18,7 +18,7 @@ private enum AyuToggle: String {
     case deleted, edits, media
     case lockReads, lockOnline, lockTyping, lockStories, lockUploads
 }
-private enum AyuLink: Hashable { case history, filters, chat }
+private enum AyuLink: Hashable { case history, filters, chat, appearance }
 private typealias AyuEntry = SGItemListUIEntry<AyuSection, AyuToggle, AnyHashable, AnyHashable, AyuLink, AnyHashable>
 private func ayuText(_ russian: Bool, _ english: String, _ russianText: String) -> String { return russian ? russianText : english }
 
@@ -67,6 +67,7 @@ public func ayuSettingsController(context: AccountContext) -> ViewController {
         switch link {
         case .history: controller?.push(ayuHistoryController(context: context))
         case .filters: controller?.push(ayuMessageFiltersController(context: context))
+        case .appearance: controller?.push(ayuAppearanceController(context: context))
         case .chat:
             let picker = context.sharedContext.makePeerSelectionController(PeerSelectionControllerParams(context: context, filter: [.excludeSecretChats, .doNotSearchMessages], hasContactSelector: false, hasGlobalSearch: false))
             picker.peerSelected = { [weak picker] peer, _ in
@@ -102,7 +103,7 @@ public func ayuSettingsController(context: AccountContext) -> ViewController {
         toggle(.interactions, .readOnSend, ghost.readOnSend, "Mark Read When Sending", "Прочитывать при отправке")
         toggle(.interactions, .readOnReaction, ghost.readOnReaction, "Mark Read When Reacting", "Прочитывать при реакции")
         toggle(.interactions, .readOnPoll, ghost.readOnPoll, "Mark Read When Voting", "Прочитывать при голосовании")
-        toggle(.interactions, .offlineAfterSend, ghost.offlineAfterSend, "Go Offline After Sending", "Уходить офлайн после отправки")
+        toggle(.interactions, .offlineAfterSend, ghost.offlineAfterSend, "Restore Offline Status Automatically", "Автоматически возвращаться офлайн")
         toggle(.interactions, .scheduled, ghost.useScheduledMessages, "Scheduled Sending in Ghost Mode", "Отложенная отправка в режиме призрака")
         toggle(.interactions, .silent, ghost.silentSendInGhostMode, "Silent Sending in Ghost Mode", "Без звука в режиме призрака")
         entries.append(.notice(id: id.count, section: .interactions, text: ayuText(ru, "Scheduled sending adds about 11 seconds and keeps manually chosen schedules. It is not used for bots, secret chats, Saved Messages, or paid messages.", "Отложенная отправка добавляет около 11 секунд и сохраняет выбранное вручную время. Не применяется к ботам, секретным чатам, «Избранному» и платным сообщениям.")))
@@ -114,6 +115,7 @@ public func ayuSettingsController(context: AccountContext) -> ViewController {
         entries.append(.notice(id: id.count, section: .archive, text: ayuText(ru, "Only content received by this device can be saved. Archive settings include chat exclusions and a retained-file limit.", "Сохраняется только содержимое, полученное этим устройством. В архиве можно настроить исключения для чатов и лимит вложений.")))
         header(.tools, "MESSAGE FILTERS", "ФИЛЬТРЫ СООБЩЕНИЙ")
         entries.append(.disclosure(id: id.count, section: .tools, link: .filters, text: ayuText(ru, "Filters, Ads and Blocked Users", "Фильтры, реклама и заблокированные")))
+        entries.append(.disclosure(id: id.count, section: .tools, link: .appearance, text: ayuText(ru, "Appearance, Local Premium and Streamer Mode", "Оформление, локальный Premium и режим стримера")))
         header(.locks, "LOCK INDIVIDUAL GHOST OPTIONS", "ФИКСАЦИЯ НАСТРОЕК ПРИЗРАКА")
         toggle(.locks, .lockReads, ghost.lockedOptions.contains(.readReceipts), "Keep Read Setting on Master Toggle", "Не менять прочтения общим переключателем")
         toggle(.locks, .lockOnline, ghost.lockedOptions.contains(.online), "Keep Online Setting", "Не менять статус «в сети»")

@@ -226,6 +226,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
 
 @objc(AppDelegate) class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, UNUserNotificationCenterDelegate, URLSessionDelegate, URLSessionTaskDelegate {
     @objc var window: UIWindow?
+    private lazy var ayuCaptureShield = AyuCaptureShield(mainWindow: { [weak self] in
+        if let nativeWindow = self?.nativeWindow { return nativeWindow }
+        return self?.window
+    })
     var nativeWindow: (UIWindow & WindowHost)?
     var mainWindow: Window1!
     private var dataImportSplash: LegacyDataImportSplash?
@@ -364,6 +368,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }
         self.window = window
         self.nativeWindow = window
+        self.ayuCaptureShield.start()
         
         hostView.containerView.layer.addSublayer(MetalEngine.shared.rootLayer)
         
@@ -2762,6 +2767,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     if let context = context {
                         if let type = type {
                             switch type {
+                                case .ghost:
+                                    SGSimpleSettings.shared.updateAyuGhostSettings(accountPath: context.context.account.basePath) { $0.setEnabled(true) }
                                 case .search:
                                     context.openRootSearch()
                                 case .compose:
@@ -2775,7 +2782,12 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                                 case .appIcon:
                                     context.openAppIcon()
                             }
+                            completionHandler(true)
+                        } else {
+                            completionHandler(false)
                         }
+                    } else {
+                        completionHandler(false)
                     }
                 })
             }

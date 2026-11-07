@@ -39,8 +39,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Select the pinned Swift toolchain
         run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+      - name: Parse all Swift changes since the verified baseline
+        run: python3 tools/ci/check-swift-syntax.py --base 471e68b5032dc299f71ed3d09e2cc34a3cb7aecf
       - name: Verify ghost policy and preference persistence
         run: |
           swiftc -warnings-as-errors \
@@ -58,8 +62,15 @@ jobs:
         run: |
           swiftc -warnings-as-errors \
             submodules/TelegramCore/Sources/State/AyuHistoryModel.swift \
+            submodules/TelegramCore/Sources/State/AyuHistoryMediaBudget.swift \
             Tests/AyuHistoryTests/main.swift -o "$RUNNER_TEMP/ayu-history-tests"
           "$RUNNER_TEMP/ayu-history-tests"
+      - name: Verify local appearance and per-account status persistence
+        run: |
+          swiftc -warnings-as-errors \
+            Swiftgram/SGSimpleSettings/Sources/AyuAppearanceSettings.swift \
+            Tests/AyuAppearanceTests/main.swift -o "$RUNNER_TEMP/ayu-appearance-tests"
+          "$RUNNER_TEMP/ayu-appearance-tests"
 
   build:
     needs: [checks, swift-checks]

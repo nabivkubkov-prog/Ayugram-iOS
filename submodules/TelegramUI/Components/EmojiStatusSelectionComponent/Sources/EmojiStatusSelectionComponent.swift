@@ -505,8 +505,10 @@ public final class EmojiStatusSelectionController: ViewController {
                                     }
                                 }
                             
+                                let allowPremiumPreview = self.controller?.allowPremiumEmojiPreview ?? false
                                 let hasPremium = context.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId))
                                 |> map { peer -> Bool in
+                                    if allowPremiumPreview { return true }
                                     guard case let .user(user) = peer else {
                                         return false
                                     }
@@ -1181,6 +1183,11 @@ public final class EmojiStatusSelectionController: ViewController {
                             
                             if let result, let previewItem = strongSelf.previewItem {
                                 let expirationDate: Int32? = result.timestamp
+                                if let controller = strongSelf.controller, case let .customStatusSelection(completion) = controller.mode {
+                                    completion(previewItem.item.itemFile?._parse(), expirationDate)
+                                    controller.dismiss()
+                                    return
+                                }
                                 if let itemGift = previewItem.item.itemGift {
                                     let _ = (strongSelf.context.engine.accountData.setStarGiftStatus(starGift: itemGift, expirationDate: expirationDate)
                                     |> deliverOnMainQueue).start()
@@ -1454,6 +1461,8 @@ public final class EmojiStatusSelectionController: ViewController {
     }
     
     public var pushController: ((ViewController) -> Void)?
+    /// Used only with a custom completion that renders a local emoji preview.
+    public var allowPremiumEmojiPreview = false
     
     public init(context: AccountContext, mode: Mode, sourceView: UIView, emojiContent: Signal<EmojiPagerContentComponent, NoError>, currentSelection: Int64?, color: UIColor? = nil, destinationItemView: @escaping () -> UIView?) {
         self.context = context

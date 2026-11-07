@@ -3110,6 +3110,7 @@ private func editingItems(data: PeerInfoScreenData?, boostStatus: ChannelBoostSt
 }
 
 final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodeProtocol, ASScrollViewDelegate {
+    private var ayuAppearanceObserver: NSObjectProtocol?
     private weak var controller: PeerInfoScreenImpl?
     
     private let context: AccountContext
@@ -3279,6 +3280,9 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         self.paneContainerNode = PeerInfoPaneContainerNode(context: context, updatedPresentationData: controller.updatedPresentationData, peerId: peerId, chatLocation: chatLocation, sharedMediaFromForumTopic: sharedMediaFromForumTopic, chatLocationContextHolder: chatLocationContextHolder, isMediaOnly: self.isMediaOnly, initialPaneKey: initialPaneKey, initialStoryFolderId: switchToStoryFolder, initialGiftCollectionId: switchToGiftCollection)
         
         super.init()
+        self.ayuAppearanceObserver = NotificationCenter.default.addObserver(forName: .ayuAppearanceChanged, object: nil, queue: .main) { [weak self] _ in
+            self?.requestLayout(animated: false)
+        }
         
         self.paneContainerNode.parentController = controller
         
@@ -4999,9 +5003,21 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                     }
                 }
                 
+                // Local appearance uses the picker completion, never account.setEmojiStatus.
+                var statusMode: EmojiStatusSelectionController.Mode = .statusSelection
+                if AyuAppearanceSettings.shared.localPremium {
+                    currentSelectedFileId = AyuAppearanceSettings.shared.localEmojiStatus(accountId: strongSelf.context.account.peerId.toInt64())
+                    selectedItems = Set(currentSelectedFileId.map { [MediaId(namespace: Namespaces.Media.CloudFile, id: $0)] } ?? [])
+                    topStatusTitle = strongSelf.presentationData.strings.baseLanguageCode == "ru" ? "Только на этом устройстве" : "Only on this device"
+                    statusMode = .customStatusSelection(completion: { [weak self] file, expiration in
+                        guard let self else { return }
+                        AyuAppearanceSettings.shared.setLocalEmojiStatus(accountId: self.context.account.peerId.toInt64(), fileId: file?.fileId.id, expiration: expiration)
+                        self.requestLayout(animated: false)
+                    })
+                }
                 let emojiStatusSelectionController = EmojiStatusSelectionController(
                     context: strongSelf.context,
-                    mode: .statusSelection,
+                    mode: statusMode,
                     sourceView: sourceView,
                     emojiContent: EmojiPagerContentComponent.emojiInputData(
                         context: strongSelf.context,
@@ -5015,13 +5031,15 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                         areCustomEmojiEnabled: true,
                         chatPeerId: strongSelf.context.account.peerId,
                         selectedItems: selectedItems,
-                        topStatusTitle: topStatusTitle
+                        topStatusTitle: topStatusTitle,
+                        forceHasPremium: AyuAppearanceSettings.shared.localPremium
                     ),
                     currentSelection: currentSelectedFileId,
                     destinationItemView: { [weak sourceView] in
                         return sourceView
                     }
                 )
+                emojiStatusSelectionController.allowPremiumEmojiPreview = AyuAppearanceSettings.shared.localPremium
                 emojiStatusSelectionController.pushController = { [weak self] c in
                     self?.controller?.push(c)
                 }
@@ -5443,6 +5461,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     }
     
     deinit {
+        if let observer = self.ayuAppearanceObserver { NotificationCenter.default.removeObserver(observer) }
         self.dataDisposable?.dispose()
         self.hiddenMediaDisposable?.dispose()
         self.activeActionDisposable.dispose()

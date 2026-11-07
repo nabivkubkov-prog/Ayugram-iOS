@@ -10,6 +10,7 @@ enum ApplicationShortcutItemType: String {
     case savedMessages
     case account
     case appIcon
+    case ghost
 }
 
 struct ApplicationShortcutItem: Equatable {
@@ -23,6 +24,8 @@ extension ApplicationShortcutItem {
     func shortcutItem() -> UIApplicationShortcutItem {
         let icon: UIApplicationShortcutIcon
         switch self.type {
+            case .ghost:
+                icon = UIApplicationShortcutIcon(type: .prohibit)
             case .search:
                 icon = UIApplicationShortcutIcon(type: .search)
             case .compose:
@@ -44,14 +47,14 @@ func applicationShortcutItems(strings: PresentationStrings, otherAccountName: St
     if let otherAccountName = otherAccountName {
         return [
             ApplicationShortcutItem(type: .search, title: strings.Common_Search, subtitle: nil),
-            ApplicationShortcutItem(type: .compose, title: strings.Compose_NewMessage, subtitle: nil),
+            ApplicationShortcutItem(type: .ghost, title: strings.baseLanguageCode == "ru" ? "Включить режим призрака" : "Enable Ghost Mode", subtitle: nil),
             ApplicationShortcutItem(type: .savedMessages, title: strings.Conversation_SavedMessages, subtitle: nil),
             ApplicationShortcutItem(type: .account, title: strings.Shortcut_SwitchAccount, subtitle: otherAccountName)
         ]
     } else {
         return [
             ApplicationShortcutItem(type: .search, title: strings.Common_Search, subtitle: nil),
-            ApplicationShortcutItem(type: .compose, title: strings.Compose_NewMessage, subtitle: nil),
+            ApplicationShortcutItem(type: .ghost, title: strings.baseLanguageCode == "ru" ? "Включить режим призрака" : "Enable Ghost Mode", subtitle: nil),
             ApplicationShortcutItem(type: .savedMessages, title: strings.Conversation_SavedMessages, subtitle: nil),
             ApplicationShortcutItem(type: .appIcon, title: strings.Shortcut_AppIcon, subtitle: nil)
         ]

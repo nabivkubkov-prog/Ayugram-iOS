@@ -55,7 +55,9 @@ private final class AccountPresenceManagerImpl {
     
     private func updatePresence(_ isOnline: Bool) {
         // MARK: RufatGram: ghost mode keeps reporting offline.
-        let isOnline = isOnline && !SGSimpleSettings.shared.ayuGhostSettings(accountPath: self.network.basePath).hideOnline
+        let requestedOnline = isOnline
+        let ghost = SGSimpleSettings.shared.ayuGhostSettings(accountPath: self.network.basePath)
+        let isOnline = requestedOnline && !ghost.hideOnline
         let request: Signal<Api.Bool, MTRpcError>
         if isOnline {
             let timer = SignalKitTimer(timeout: 30.0, repeat: false, completion: { [weak self] in
@@ -70,6 +72,16 @@ private final class AccountPresenceManagerImpl {
         } else {
             self.onlineTimer?.invalidate()
             self.onlineTimer = nil
+            if requestedOnline && ghost.hideOnline && ghost.offlineAfterSend {
+                // Telegram may infer online presence from actions other than updateStatus.
+                // Keep restoring offline only while this account is active in the foreground.
+                let timer = SignalKitTimer(timeout: 3.0, repeat: false, completion: { [weak self] in
+                    guard let self = self else { return }
+                    self.updatePresence(self.wasOnline)
+                }, queue: self.queue)
+                self.onlineTimer = timer
+                timer.start()
+            }
             request = self.network.request(Api.functions.account.updateStatus(offline: .boolTrue))
         }
         self.isPerformingUpdate.set(true)

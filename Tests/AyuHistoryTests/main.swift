@@ -99,9 +99,52 @@ expect(chatRules.allowsMessages(category: .privateChat, isBotDialog: false, isBo
 let restoredRules = try JSONDecoder().decode(AyuHistoryChatRules.self, from: JSONEncoder().encode(chatRules))
 expect(restoredRules == chatRules, "chat policies round-trip")
 
+expect(AyuHistoryCapacity().canInsert(bytes: 1024), "new archive has capacity")
+expect(!AyuHistoryCapacity(records: AyuHistoryCapacity.maximumRecords, bytes: 0).canInsert(bytes: 1), "record cap stops insertion without evicting existing history")
+expect(!AyuHistoryCapacity(records: 1, bytes: AyuHistoryCapacity.maximumBytes).canInsert(bytes: 1), "metadata byte cap")
+expect(!AyuHistoryCapacity().canInsert(bytes: -1), "invalid negative byte count rejected")
+expect(!AyuHistoryCapacity().canInsert(bytes: Int.max), "oversized record cannot overflow capacity arithmetic")
+
 expect(AyuHistoryPolicy.safeAttachmentName("123E4567-E89B-12D3-A456-426614174000.jpg"), "generated attachment basename accepted")
 for unsafe in ["../file.jpg", "/tmp/file.jpg", "C:\\private\\file.jpg", "123E4567-E89B-12D3-A456-426614174000../jpg", "123E4567-E89B-12D3-A456-426614174000.jpg/../file", "123E4567-E89B-12D3-A456-426614174000."] {
     expect(!AyuHistoryPolicy.safeAttachmentName(unsafe), "unsafe filename rejected: \(unsafe)")
 }
+
+let fileManager = FileManager.default
+let testDirectory = fileManager.temporaryDirectory.appendingPathComponent("AyuHistoryTests-\(UUID().uuidString)", isDirectory: true)
+try fileManager.createDirectory(at: testDirectory, withIntermediateDirectories: true)
+defer { try? fileManager.removeItem(at: testDirectory) }
+let attachmentDirectory = testDirectory.appendingPathComponent("attachments", isDirectory: true)
+try fileManager.createDirectory(at: attachmentDirectory, withIntermediateDirectories: true)
+let source = testDirectory.appendingPathComponent("source.bin")
+let bytes = Data(repeating: 42, count: 80)
+try bytes.write(to: source)
+let retained = attachmentDirectory.appendingPathComponent(UUID().uuidString + ".bin")
+let firstRoom = try AyuHistoryMediaBudget.shared.makeRoom(directory: attachmentDirectory, requiredBytes: 80, limitBytes: 100)
+expect(firstRoom, "empty media directory has room")
+try fileManager.linkItem(at: source, to: retained)
+AyuHistoryMediaBudget.shared.didRetain(url: retained, bytes: 80)
+try fileManager.removeItem(at: source)
+let retainedBytes = try Data(contentsOf: retained)
+expect(retainedBytes == bytes, "retained hard link survives deletion of the cache path")
+let replacementRoom = try AyuHistoryMediaBudget.shared.makeRoom(directory: attachmentDirectory, requiredBytes: 80, limitBytes: 100)
+expect(replacementRoom, "old files are evicted to make room")
+expect(!fileManager.fileExists(atPath: retained.path), "old retained file actually removed")
+let tooBig = try AyuHistoryMediaBudget.shared.makeRoom(directory: attachmentDirectory, requiredBytes: 101, limitBytes: 100)
+expect(!tooBig, "single oversized attachment is rejected")
+
+let second = attachmentDirectory.appendingPathComponent(UUID().uuidString + ".bin")
+try bytes.write(to: second)
+AyuHistoryMediaBudget.shared.didRetain(url: second, bytes: 80)
+let unmanaged = attachmentDirectory.appendingPathComponent("do-not-touch.txt")
+try Data(repeating: 1, count: 500).write(to: unmanaged)
+AyuHistoryMediaBudget.shared.invalidate(directory: attachmentDirectory)
+let rebuiltRoom = try AyuHistoryMediaBudget.shared.makeRoom(directory: attachmentDirectory, requiredBytes: 80, limitBytes: 100)
+expect(rebuiltRoom, "usage index rebuilds from disk after restart/invalidation")
+expect(!fileManager.fileExists(atPath: second.path), "rebuilt index respects existing retained files")
+expect(fileManager.fileExists(atPath: unmanaged.path), "budget never deletes files outside its generated-name namespace")
+let unlimited = try AyuHistoryMediaBudget.shared.makeRoom(directory: attachmentDirectory, requiredBytes: Int64.max, limitBytes: 0)
+expect(unlimited, "explicit unlimited media policy has no artificial size cap")
+AyuHistoryMediaBudget.shared.invalidate(directory: attachmentDirectory)
 
 print("AyuHistory: \(checks) checks passed")

@@ -5,6 +5,22 @@ public enum AyuHistoryKind: String, Codable, Equatable {
     case edited
 }
 
+public struct AyuHistoryCapacity: Codable, Equatable {
+    public static let maximumRecords = 20_000
+    public static let maximumBytes = 64 * 1024 * 1024
+    public var records: Int
+    public var bytes: Int
+
+    public init(records: Int = 0, bytes: Int = 0) {
+        self.records = records
+        self.bytes = bytes
+    }
+
+    public func canInsert(bytes newBytes: Int) -> Bool {
+        return newBytes >= 0 && records < Self.maximumRecords && bytes <= Self.maximumBytes - newBytes
+    }
+}
+
 public enum AyuHistoryChatCategory: String, Codable, CaseIterable {
     case privateChat
     case publicChannel
@@ -52,6 +68,22 @@ public struct AyuHistoryAttachment: Codable, Equatable {
     public let size: Int64
     /// A generated basename in the account's archive directory, never an external path.
     public var retainedFileName: String?
+    public let role: String?
+    public let width: Int32?
+    public let height: Int32?
+    public let duration: Double?
+
+    public init(resourceId: String, originalName: String, mimeType: String, size: Int64, retainedFileName: String?, role: String? = nil, width: Int32? = nil, height: Int32? = nil, duration: Double? = nil) {
+        self.resourceId = resourceId
+        self.originalName = originalName
+        self.mimeType = mimeType
+        self.size = size
+        self.retainedFileName = retainedFileName
+        self.role = role
+        self.width = width
+        self.height = height
+        self.duration = duration
+    }
 }
 
 public struct AyuHistoryRecord: Codable, Equatable {
@@ -149,7 +181,7 @@ public struct AyuHistoryBackup: Codable {
                   record.attachments.count <= 256,
                   record.attributes.allSatisfy({ $0.count <= 2_000_000 }),
                   record.media.allSatisfy({ $0.count <= 2_000_000 }),
-                  record.attachments.allSatisfy({ $0.size >= 0 && $0.resourceId.utf8.count <= 1024 && $0.originalName.utf8.count <= 4096 && $0.mimeType.utf8.count <= 256 }),
+                  record.attachments.allSatisfy({ $0.size >= 0 && $0.resourceId.utf8.count <= 1024 && $0.originalName.utf8.count <= 4096 && $0.mimeType.utf8.count <= 256 && ($0.role?.utf8.count ?? 0) <= 64 && ($0.width ?? 0) >= 0 && ($0.height ?? 0) >= 0 && ($0.duration ?? 0).isFinite && ($0.duration ?? 0) >= 0 }),
                   seen.insert(record.id).inserted else {
                 throw AyuHistoryBackupError.invalidRecord
             }

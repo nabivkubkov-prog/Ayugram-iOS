@@ -55,14 +55,20 @@ private final class AyuHistoryActions: NSObject, UIDocumentPickerDelegate {
     var currentState = AyuHistoryUIState()
     var records: [AyuHistoryRecord] = []
     private let operation = MetaDisposable()
+    private let repair = MetaDisposable()
+    private var settingsObserver: NSObjectProtocol?
 
     init(context: AccountContext) {
         self.context = context
         super.init()
+        settingsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main, using: { [weak self] _ in self?.refresh() })
+        repair.set(AyuHistoryStore.repairOrphanedMedia(postbox: context.account.postbox).start())
     }
 
     deinit {
         operation.dispose()
+        repair.dispose()
+        if let settingsObserver = settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
     }
 
     var russian: Bool {
@@ -212,9 +218,22 @@ private final class AyuHistoryActions: NSObject, UIDocumentPickerDelegate {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             do {
-                let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-                guard size <= AyuHistoryBackup.maximumBytes else { throw AyuHistoryBackupError.tooLarge }
-                let backup = try AyuHistoryBackup.decoded(Data(contentsOf: url), accountId: accountId)
+                guard let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= AyuHistoryBackup.maximumBytes else { throw AyuHistoryBackupError.tooLarge }
+                let stream = InputStream(url: url)
+                guard let stream = stream else { throw AyuHistoryBackupError.invalidRecord }
+                stream.open()
+                defer { stream.close() }
+                var data = Data()
+                let bufferSize = 64 * 1024
+                var buffer = [UInt8](repeating: 0, count: bufferSize)
+                while true {
+                    let read = stream.read(&buffer, maxLength: bufferSize)
+                    guard read >= 0 else { throw stream.streamError ?? AyuHistoryBackupError.invalidRecord }
+                    if read == 0 { break }
+                    guard data.count <= AyuHistoryBackup.maximumBytes - read else { throw AyuHistoryBackupError.tooLarge }
+                    data.append(contentsOf: buffer.prefix(read))
+                }
+                let backup = try AyuHistoryBackup.decoded(data, accountId: accountId)
                 DispatchQueue.main.async {
                     guard let self = self else { return }
                     self.controller?.present(textAlertController(context: self.context, title: ayuHistoryText(self.russian, "Import history", "Импорт истории"), text: ayuHistoryText(self.russian, "Merge \(backup.records.count) records? Duplicates are skipped. JSON backups do not contain attachment files.", "Объединить записи (\(backup.records.count)) с архивом? Дубликаты пропускаются. JSON-копии не содержат файлов вложений."), actions: [
@@ -276,6 +295,9 @@ public func ayuHistoryController(context: AccountContext, messageId: MessageId? 
         entries.append(.notice(id: id.count, section: .options, text: ayuHistoryText(russian, "This archive survives Telegram media-cache clearing. Only messages observed by this device can be saved. Attachments must already be downloaded; secret chats and timed messages are excluded. JSON export contains text and metadata, not attachment files.", "Архив сохраняется после очистки медиакэша Telegram. Можно сохранить только сообщения, полученные этим устройством. Вложения должны быть уже загружены; секретные чаты и сообщения с таймером исключены. JSON-экспорт содержит текст и метаданные, без файлов вложений.")))
         if settings.archiveOnlySelected && !settings.archiveExcludedPeerIds.contains(where: { $0.hasPrefix("\(context.account.peerId.toInt64()):") }) {
             entries.append(.notice(id: id.count, section: .options, text: ayuHistoryText(russian, "Nothing will be saved until you add a chat to the selected list.", "Ничего не сохраняется, пока вы не добавите чат в список выбранных.")))
+        }
+        if AyuHistoryStore.capacityWasReached(accountId: context.account.peerId.toInt64()) {
+            entries.append(.notice(id: id.count, section: .options, text: ayuHistoryText(russian, "The archive reached its capacity (20,000 records or 64 MB of metadata). New snapshots are paused. Export and clear older records to make room; existing records are not removed automatically.", "Достигнут предел архива: 20 000 записей или 64 МБ метаданных. Новые версии пока не сохраняются. Экспортируйте и удалите старые записи, чтобы освободить место; существующие записи автоматически не удаляются.")))
         }
         entries.append(.searchInput(id: id.count, section: .search, title: NSAttributedString(string: ""), text: state.query, placeholder: ayuHistoryText(russian, "Text, sender, chat or ID", "Текст, автор, чат или ID")))
         entries.append(.header(id: id.count, section: .records, text: ayuHistoryText(russian, "RECORDS: \(matching.count)", "ЗАПИСЕЙ: \(matching.count)"), badge: nil))
@@ -342,9 +364,17 @@ private func ayuHistoryDetailController(context: AccountContext, record: AyuHist
             .text(1, "\(record.peerName)\n\(record.authorName)\n" + ayuHistoryText(russian, "Original: \(originalDate)\nSaved: \(date)", "Отправлено: \(originalDate)\nСохранено: \(date)")),
             .text(2, "ID: \(record.peerId) / \(record.namespace) / \(record.messageId)"),
             .text(3, record.text.isEmpty ? ayuHistoryText(russian, "Message without text", "Сообщение без текста") : record.text),
-            .text(4, ayuHistoryText(russian, "Retained attachments: \(available) / \(record.attachments.count)", "Сохранённые вложения: \(available) / \(record.attachments.count)")),
-            .action(100, ayuHistoryText(russian, "Copy text", "Копировать текст"))
+            .text(4, ayuHistoryText(russian, "Retained attachments: \(available) / \(record.attachments.count)", "Сохранённые вложения: \(available) / \(record.attachments.count)"))
         ]
+        for (index, attachment) in record.attachments.prefix(64).enumerated() {
+            let retained = AyuHistoryStore.attachmentURL(mediaBox: context.account.postbox.mediaBox, attachment: attachment) != nil
+            var details = "\(attachment.originalName)\n\(attachment.mimeType) · \(ByteCountFormatter.string(fromByteCount: attachment.size, countStyle: .file))"
+            if let width = attachment.width, let height = attachment.height { details += " · \(width)×\(height)" }
+            if let duration = attachment.duration { details += String(format: " · %.1f s", duration) }
+            details += "\n" + (retained ? ayuHistoryText(russian, "File retained", "Файл сохранён") : ayuHistoryText(russian, "File unavailable", "Файл недоступен"))
+            entries.append(.text(5 + index, details))
+        }
+        entries.append(.action(100, ayuHistoryText(russian, "Copy text", "Копировать текст")))
         if available > 0 { entries.append(.action(101, ayuHistoryText(russian, "Open / share attachments", "Открыть / поделиться вложениями"))) }
         entries.append(.action(102, ayuHistoryText(russian, "Chat saving rule", "Правило сохранения чата")))
         let title = record.kind == .edited ? ayuHistoryText(russian, "Previous Revision", "Предыдущая версия") : ayuHistoryText(russian, "Deleted Message", "Удалённое сообщение")

@@ -64,9 +64,6 @@ extension ChatControllerImpl {
                 switch actions.content {
                 case let .list(currentItemList):
                     var itemList = currentItemList
-                    if itemList.isEmpty {
-                        return
-                    }
                     if message.id.namespace == Namespaces.Message.Cloud && message.id.peerId.namespace != Namespaces.Peer.SecretChat {
                         let russian = presentationData.strings.baseLanguageCode.hasPrefix("ru")
                         itemList.append(.action(ContextMenuActionItem(text: russian ? "История AyuGram" : "AyuGram History", icon: { theme in
@@ -76,8 +73,40 @@ extension ChatControllerImpl {
                             guard let self = self else { return }
                             self.push(ayuHistoryController(context: self.context, messageId: message.id))
                         })))
+                        if !message.media.contains(where: { $0 is TelegramMediaAction }) {
+                            itemList.append(.action(ContextMenuActionItem(text: russian ? "Снимок сообщения" : "Message Shot", icon: { theme in
+                                return generateTintedImage(image: UIImage(systemName: "camera"), color: theme.actionSheet.primaryTextColor)
+                            }, action: { [weak self] _, complete in
+                                complete(.default)
+                                guard let self = self else { return }
+                                ayuShareMessageImage(view: node.view, controller: self)
+                            })))
+                            itemList.append(.action(ContextMenuActionItem(text: russian ? "Сведения о сообщении" : "Message Details", icon: { theme in
+                                return generateTintedImage(image: UIImage(systemName: "info.circle"), color: theme.actionSheet.primaryTextColor)
+                            }, action: { [weak self] _, complete in
+                                complete(.default)
+                                guard let self = self else { return }
+                                ayuPresentMessageDetails(context: self.context, message: message, controller: self)
+                            })))
+                            itemList.append(.action(ContextMenuActionItem(text: "AyuForward", icon: { theme in
+                                return generateTintedImage(image: UIImage(systemName: "arrowshape.turn.up.right"), color: theme.actionSheet.primaryTextColor)
+                            }, action: { [weak self] _, complete in
+                                complete(.default)
+                                guard let self = self else { return }
+                                ayuPresentForward(context: self.context, messages: updatedMessages, controller: self)
+                            })))
+                            if !message.text.isEmpty {
+                                itemList.append(.action(ContextMenuActionItem(text: russian ? "Копировать текст (AyuGram)" : "Copy Text (AyuGram)", icon: { theme in
+                                    return generateTintedImage(image: UIImage(systemName: "doc.on.doc"), color: theme.actionSheet.primaryTextColor)
+                                }, action: { _, complete in
+                                    UIPasteboard.general.string = message.text
+                                    complete(.default)
+                                })))
+                            }
+                        }
                         actions.content = .list(itemList)
                     }
+                    if itemList.isEmpty { return }
                 case .custom, .twoLists:
                     break
                 }
