@@ -123,21 +123,6 @@ jobs:
           xcodebuild -version
           xcode-select -p
 
-      - name: Install simulator runtimes for the selected Xcode
-        timeout-minutes: 45
-        run: |
-          set -euo pipefail
-          # actool/ibtool need simulator runtimes matching the SDKs of the selected
-          # Xcode (Watch asset catalog, LaunchScreen.xib); runner images only ship
-          # newer runtimes.
-          xcrun simctl list runtimes
-          # Match the actual successful build, rather than downloading whichever
-          # runtime Apple marks latest on the day the workflow runs.
-          python3 tools/ci/install-simulator-runtimes.py \
-            --runtime iOS=18.3.1 --runtime watchOS=11.2
-          xcrun simctl list runtimes
-          df -h "$GITHUB_WORKSPACE"
-
       - name: Verify build configuration template
         run: |
           set -euo pipefail
@@ -190,11 +175,29 @@ jobs:
         run: |
           set -euo pipefail
           CONFIG="build-system/rufatgram-configuration.local.json"
-          EXTRA_ARGS=()
-          if [ "$SIGNED_BUILD" = "true" ]; then EXTRA_ARGS+=(--signed); fi
-          python3 tools/ci/prepare-configuration.py build-system/rufatgram-configuration.json "$CONFIG" "${EXTRA_ARGS[@]}"
+          # macOS ships Bash 3.2, where an empty array is unbound under set -u.
+          if [ "$SIGNED_BUILD" = "true" ]; then
+            python3 tools/ci/prepare-configuration.py build-system/rufatgram-configuration.json "$CONFIG" --signed
+          else
+            python3 tools/ci/prepare-configuration.py build-system/rufatgram-configuration.json "$CONFIG"
+          fi
           test -f "$CONFIG"
           echo "path=$CONFIG" >> "$GITHUB_OUTPUT"
+
+      - name: Install simulator runtimes for the selected Xcode
+        timeout-minutes: 45
+        run: |
+          set -euo pipefail
+          # actool/ibtool need simulator runtimes matching the SDKs of the selected
+          # Xcode (Watch asset catalog, LaunchScreen.xib); runner images only ship
+          # newer runtimes.
+          xcrun simctl list runtimes
+          # Match the actual successful build, rather than downloading whichever
+          # runtime Apple marks latest on the day the workflow runs.
+          python3 tools/ci/install-simulator-runtimes.py \
+            --runtime iOS=18.3.1 --runtime watchOS=11.2
+          xcrun simctl list runtimes
+          df -h "$GITHUB_WORKSPACE"
 
       - name: Import signing certificate and provisioning profiles
         if: steps.signing.outputs.mode == 'signed'

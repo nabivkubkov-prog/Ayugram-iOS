@@ -10,7 +10,7 @@ The implementation branch is `ayugram-ios-port`, based on the previously built `
 - Read-receipt suppression at the outgoing request boundary, including media contents, mentions, reactions, discussions and stories; an explicit one-shot server-read command and a separate local-read command.
 - Online/typing/upload controls, offline restoration after sending, optional read-on-send/reaction/vote, silent sending and delayed sending while ghost mode is active.
 - A per-account archive of deleted messages and previous edits, with search, message-specific history, downloaded attachment retention, storage limits, chat rules, and JSON metadata import/export.
-- Literal and regular-expression message filters, optional hiding of sponsored posts and blocked users, and filter exceptions.
+- Literal and regular-expression message filters, optional hiding of sponsored posts and blocked users, and individually enabled rules. Per-chat filter exclusions are not implemented yet.
 - AyuForward for copying received text, photos, files, voice messages, contacts and locations as new messages, with attachment reupload; message-image sharing and message details.
 - A foreground recording/mirroring shield, optional chat-list masking, local-only Premium icon/status previews, and a launch shortcut that enables ghost mode.
 - Existing client customization, multiple accounts, Telegram chats, calls and media support.
