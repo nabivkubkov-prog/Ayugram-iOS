@@ -157,6 +157,11 @@ public class SGSimpleSettings {
         case ghostHideOnline
         case ghostHideTyping
         case keepDeletedMessages
+        case saveEditHistory
+        case saveHistoryMedia
+        case archiveMediaLimitMB
+        case archiveExcludedPeerIds
+        case archiveOnlySelected
         case wallpaperInChatList
         case chatListItemOpacity
     }
@@ -293,6 +298,11 @@ public class SGSimpleSettings {
         Keys.ghostHideOnline.rawValue: false,
         Keys.ghostHideTyping.rawValue: false,
         Keys.keepDeletedMessages.rawValue: false,
+        Keys.saveEditHistory.rawValue: false,
+        Keys.saveHistoryMedia.rawValue: true,
+        Keys.archiveMediaLimitMB.rawValue: 1024,
+        Keys.archiveExcludedPeerIds.rawValue: [],
+        Keys.archiveOnlySelected.rawValue: false,
         Keys.wallpaperInChatList.rawValue: false,
         Keys.chatListItemOpacity.rawValue: 70,
     ]
@@ -538,6 +548,21 @@ public class SGSimpleSettings {
 
     @UserDefault(key: Keys.keepDeletedMessages.rawValue)
     public var keepDeletedMessages: Bool
+
+    @UserDefault(key: Keys.saveEditHistory.rawValue)
+    public var saveEditHistory: Bool
+
+    @UserDefault(key: Keys.saveHistoryMedia.rawValue)
+    public var saveHistoryMedia: Bool
+
+    @UserDefault(key: Keys.archiveMediaLimitMB.rawValue)
+    public var archiveMediaLimitMB: Int32
+
+    @UserDefault(key: Keys.archiveExcludedPeerIds.rawValue)
+    public var archiveExcludedPeerIds: [String]
+
+    @UserDefault(key: Keys.archiveOnlySelected.rawValue)
+    public var archiveOnlySelected: Bool
 
     @UserDefault(key: Keys.wallpaperInChatList.rawValue)
     public var wallpaperInChatList: Bool

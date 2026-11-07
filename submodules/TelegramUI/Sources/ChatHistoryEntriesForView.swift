@@ -12,6 +12,7 @@ import TextFormat
 import Markdown
 import Display
 import TelegramStringFormatting
+import SGSimpleSettings
 
 struct ChatHistoryEntriesForViewState {
     private var messageStableIdToLocalId: [UInt32: Int64] = [:]
@@ -58,7 +59,8 @@ func chatHistoryEntriesForView(
     customThreadOutgoingReadState: MessageId?,
     cachedData: CachedPeerData?,
     adMessage: Message?,
-    dynamicAdMessages: [Message]
+    dynamicAdMessages: [Message],
+    ayuFilterState: AyuChatMessageFilterState
 ) -> ([ChatHistoryEntry], ChatHistoryEntriesForViewState) {
     var currentState = currentState
     
@@ -126,6 +128,18 @@ func chatHistoryEntriesForView(
         var isRead = entry.isRead
         
         if pendingRemovedMessages.contains(message.id) {
+            continue
+        }
+
+        // Apply filters only to presentation entries. The original Postbox
+        // history, message counts and synchronization state remain intact.
+        if ayuFilterState.filter.shouldHide(
+            text: message.text,
+            isOutgoing: !message.effectivelyIncoming(context.account.peerId) || message.author?.id == context.account.peerId,
+            isService: message.media.contains(where: { $0 is TelegramMediaAction }),
+            isSponsored: message.adAttribute != nil,
+            isAuthorBlocked: message.author.map { ayuFilterState.blockedPeerIds.contains($0.id) } ?? false
+        ) {
             continue
         }
         
@@ -633,7 +647,7 @@ func chatHistoryEntriesForView(
             }
         }
         
-        if !dynamicAdMessages.isEmpty {
+        if !ayuFilterState.filter.hidesSponsoredMessages && !dynamicAdMessages.isEmpty {
             assert(entries.sorted() == entries)
             for message in dynamicAdMessages {
                 entries.append(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false)))
@@ -642,7 +656,7 @@ func chatHistoryEntriesForView(
         }
 
         if view.laterId == nil && !view.isLoading {
-            if !entries.isEmpty, case let .MessageEntry(lastMessage, _, _, _, _, _) = entries[entries.count - 1], let message = adMessage {
+            if !ayuFilterState.filter.hidesSponsoredMessages, !entries.isEmpty, case let .MessageEntry(lastMessage, _, _, _, _, _) = entries[entries.count - 1], let message = adMessage {
                 var nextAdMessageId: Int32 = 10000
                 let updatedMessage = Message(
                     stableId: ChatHistoryListNodeImpl.fixedAdMessageStableId,

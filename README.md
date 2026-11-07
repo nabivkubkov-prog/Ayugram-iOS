@@ -1,129 +1,48 @@
-# Swiftgram
+# AyuGram for iOS
 
-Supercharged Telegram fork for iOS
+An unofficial iOS port of AyuGram features, built on this repository's Swiftgram / Telegram iOS client. This project is independent of the AyuGram and Telegram teams.
 
-[<img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" height="50">](https://apps.apple.com/app/apple-store/id6471879502?pt=126511626&ct=gh&mt=8)
+The implementation branch is `ayugram-ios-port`, based on the previously built `feature/ci-and-privacy-center` branch. It preserves the Telegram 12.0, Xcode 16.2 and Bazel 8.3.1 toolchain. Updating Telegram's protocol and upstream version is a separate integration task.
 
-- Download: [App Store](https://apps.apple.com/app/apple-store/id6471879502?pt=126511626&ct=gh&mt=8)
-- Telegram channel: https://t.me/swiftgram
-- Telegram chat: https://t.me/swiftgramchat
-- TestFlight beta, local chats, translations and other [@SwiftgramLinks](https://t.me/s/SwiftgramLinks)
+## Implemented in this branch
 
-Swiftgram's compilation steps are the same as for the official app. Below you'll find a complete compilation guide based on the official app.
+- Ghost settings shared across accounts or kept individually, a master toggle, locked options, and per-chat read/typing exceptions.
+- Read-receipt suppression at the outgoing request boundary, including media contents, mentions, reactions, discussions and stories; an explicit one-shot server-read command and a separate local-read command.
+- Online/typing/upload controls, offline restoration after sending, optional read-on-send/reaction/vote, silent sending and delayed sending while ghost mode is active.
+- A per-account archive of deleted messages and previous edits, with search, message-specific history, downloaded attachment retention, storage limits, chat rules, and JSON metadata import/export.
+- Literal and regular-expression message filters, optional hiding of sponsored posts and blocked users, and filter exceptions.
+- Existing client customization, multiple accounts, Telegram chats, calls and media support.
 
-# Telegram iOS Source Code Compilation Guide
+Implementation is not equivalent to device verification or complete parity. [The feature audit](docs/AYUGRAM_FEATURE_AUDIT.md) lists the reference features and acceptance criteria, including platform limitations and missing source components. The supplied Android APK has been inspected statically; exact matching source for that binary is not available in the inspected public repository. Features should only be marked verified after the relevant tests actually run.
 
-We welcome all developers to use our API and source code to create applications on our platform.
-There are several things we require from **all developers** for the moment.
+## Build on GitHub Actions
 
-# Creating your Telegram Application
+Repository settings → **Secrets and variables → Actions → New repository secret**:
 
-1. [**Obtain your own api_id**](https://core.telegram.org/api/obtaining_api_id) for your application.
-2. Please **do not** use the name Telegram for your app — or make sure your users understand that it is unofficial.
-3. Kindly **do not** use our standard logo (white paper plane in a blue circle) as your app's logo.
-3. Please study our [**security guidelines**](https://core.telegram.org/mtproto/security_guidelines) and take good care of your users' data and privacy.
-4. Please remember to publish **your** code too in order to comply with the licences.
+| Secret | Value |
+| --- | --- |
+| `RUFATGRAM_API_ID` | Your numerical Telegram `api_id` from <https://my.telegram.org/apps> |
+| `RUFATGRAM_API_HASH` | The matching Telegram `api_hash` |
 
-# Quick Compilation Guide
+The existing secret names are retained for compatibility with previous builds. They must not be placed in committed files. [Open the repository's Actions secrets](https://github.com/nabivkubkov-prog/Ayugram-iOS/settings/secrets/actions).
 
-## Get the Code
+Pushes to `ayugram-ios-port` run configuration tests and Swift policy tests, then build the full iOS target on `macos-15-intel`. The workflow rejects missing API credentials. It validates the produced IPA's bundle ID, build number, ARM64 executable and extensions before uploading an artifact and SHA-256 manifest. It does not automatically publish releases.
 
-```
-git clone --recursive -j8 https://github.com/Swiftgram/Telegram-iOS.git
-```
+An unsigned/test-signed IPA requires re-signing before installation on a physical iPhone. A signed build additionally needs the Apple team ID, certificate and matching provisioning profiles described in [CI documentation](tools/ci/README.md). Compilation does not verify login, APNs or on-device behavior.
 
-## Setup Xcode
+[Upstream manual build guide](docs/UPSTREAM_BUILD.md) · [Workflows](https://github.com/nabivkubkov-prog/Ayugram-iOS/actions)
 
-Install Xcode (directly from https://developer.apple.com/download/applications or using the App Store).
+## Data and platform behavior
 
-## Adjust Configuration
+The archive can retain only messages and resources this device has received. Attachments are copied outside Telegram's evictable media cache; unavailable downloads are identified as unavailable. JSON backups contain message metadata and serialized references, not the attachment files themselves. Logging out or deleting application data removes the local account archive.
 
-1. Generate a random identifier:
-```
-openssl rand -hex 8
-```
-2. Create a new Xcode project. Use `Swiftgram` as the Product Name. Use `org.{identifier from step 1}` as the Organization Identifier.
-3. Open `Keychain Access` and navigate to `Certificates`. Locate `Apple Development: your@email.address (XXXXXXXXXX)` and double tap the certificate. Under `Details`, locate `Organizational Unit`. This is the Team ID.
-4. Edit `build-system/template_minimal_development_configuration.json`. Use data from the previous steps.
+Other Telegram sessions can publish their own online/read state. iOS can suspend the application in the background. Server-controlled Premium benefits and Android foreground services cannot be reproduced by a local iOS setting. Runtime scenarios for these limits belong in the verification matrix.
 
-## Generate an Xcode project
+## Credits
 
-```
-python3 build-system/Make/Make.py \
-    --cacheDir="$HOME/telegram-bazel-cache" \
-    generateProject \
-    --configurationPath=build-system/template_minimal_development_configuration.json \
-    --xcodeManagedCodesigning
-```
+- [Telegram iOS](https://github.com/TelegramMessenger/Telegram-iOS)
+- [Swiftgram](https://github.com/Swiftgram/Telegram-iOS)
+- [AyuGram Desktop](https://github.com/AyuGram/AyuGramDesktop) and [AyuGram Android](https://github.com/AyuGram/AyuGram4A), for behavior references and the AyuGram artwork
+- The original authors and license notices in individual source files and submodules
 
-# Advanced Compilation Guide
-
-## Xcode
-
-1. Copy and edit `build-system/appstore-configuration.json`.
-2. Copy `build-system/fake-codesigning`. Create and download provisioning profiles, using the `profiles` folder as a reference for the entitlements.
-3. Generate an Xcode project:
-```
-python3 build-system/Make/Make.py \
-    --cacheDir="$HOME/telegram-bazel-cache" \
-    generateProject \
-    --configurationPath=configuration_from_step_1.json \
-    --codesigningInformationPath=directory_from_step_2
-```
-
-## IPA
-
-1. Repeat the steps from the previous section. Use distribution provisioning profiles.
-2. Run:
-```
-python3 build-system/Make/Make.py \
-    --cacheDir="$HOME/telegram-bazel-cache" \
-    build \
-    --configurationPath=...see previous section... \
-    --codesigningInformationPath=...see previous section... \
-    --buildNumber=100001 \
-    --configuration=release_arm64
-```
-
-# FAQ
-
-## Xcode is stuck at "build-request.json not updated yet"
-
-Occasionally, you might observe the following message in your build log:
-```
-"/Users/xxx/Library/Developer/Xcode/DerivedData/Telegram-xxx/Build/Intermediates.noindex/XCBuildData/xxx.xcbuilddata/build-request.json" not updated yet, waiting...
-```
-
-Should this occur, simply cancel the ongoing build and initiate a new one.
-
-## Telegram_xcodeproj: no such package 
-
-Following a system restart, the auto-generated Xcode project might encounter a build failure accompanied by this error:
-```
-ERROR: Skipping '@rules_xcodeproj_generated//generator/Telegram/Telegram_xcodeproj:Telegram_xcodeproj': no such package '@rules_xcodeproj_generated//generator/Telegram/Telegram_xcodeproj': BUILD file not found in directory 'generator/Telegram/Telegram_xcodeproj' of external repository @rules_xcodeproj_generated. Add a BUILD file to a directory to mark it as a package.
-```
-
-If you encounter this issue, re-run the project generation steps in the README.
-
-
-# Tips
-
-## Codesigning is not required for simulator-only builds
-
-Add `--disableProvisioningProfiles`:
-```
-python3 build-system/Make/Make.py \
-    --cacheDir="$HOME/telegram-bazel-cache" \
-    generateProject \
-    --configurationPath=path-to-configuration.json \
-    --codesigningInformationPath=path-to-provisioning-data \
-    --disableProvisioningProfiles
-```
-
-## Versions
-
-Each release is built using a specific Xcode version (see `versions.json`). The helper script checks the versions of the installed software and reports an error if they don't match the ones specified in `versions.json`. It is possible to bypass these checks:
-
-```
-python3 build-system/Make/Make.py --overrideXcodeVersion build ... # Don't check the version of Xcode
-```
+Preserve the applicable upstream licenses, attribution, and corresponding-source obligations when distributing modified builds.

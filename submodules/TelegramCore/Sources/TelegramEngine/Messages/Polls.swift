@@ -20,6 +20,9 @@ func _internal_requestMessageSelectPollOption(account: Account, messageId: Messa
                 return .generic
             }
             |> mapToSignal { result -> Signal<TelegramMediaPoll?, RequestMessageSelectPollOptionError> in
+                if !opaqueIdentifiers.isEmpty {
+                    ayuReadAfterInteraction(account: account, peerId: messageId.peerId, interaction: .poll)
+                }
                 return account.postbox.transaction { transaction -> TelegramMediaPoll? in
                     var resultPoll: TelegramMediaPoll?
                     switch result {

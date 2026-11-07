@@ -220,6 +220,11 @@ private func validatePeerReadState(network: Network, postbox: Postbox, stateMana
 }
 
 private func pushPeerReadState(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId, readState: PeerReadState) -> Signal<PeerReadState, PeerReadStateValidationError> {
+    // Finish local synchronization for both cloud and secret chats without
+    // sending a receipt when this peer's policy requests local-only reading.
+    if SGSimpleSettings.shared.ayuGhostSettings(accountPath: network.basePath).hidesReadReceipts(peerId: peerId.toInt64()) {
+        return .single(readState)
+    }
     if peerId.namespace == Namespaces.Peer.SecretChat {
         return inputSecretChat(postbox: postbox, peerId: peerId)
         |> mapToSignal { inputPeer -> Signal<PeerReadState, PeerReadStateValidationError> in
@@ -227,28 +232,29 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
             case .idBased:
                 return .single(readState)
             case let .indexBased(maxIncomingReadIndex, _, _, _):
-                return network.request(Api.functions.messages.readEncryptedHistory(peer: inputPeer, maxDate: maxIncomingReadIndex.timestamp))
-                    |> mapError { _ in
-                        return PeerReadStateValidationError.retry
+                return network.request(Api.functions.messages.readEncryptedHistory(peer: inputPeer, maxDate: maxIncomingReadIndex.timestamp), ayuPeerId: peerId)
+                |> `catch` { error -> Signal<Api.Bool, PeerReadStateValidationError> in
+                    // The setting can change between queuing and subscribing.
+                    // A locally suppressed receipt must not enter a retry loop.
+                    if error.errorDescription == "AYU_READ_SUPPRESSED" {
+                        return .complete()
                     }
-                |> mapToSignal { _ -> Signal<PeerReadState, PeerReadStateValidationError> in
-                    return .single(readState)
+                    return .fail(.retry)
                 }
+                |> mapToSignal { _ -> Signal<PeerReadState, PeerReadStateValidationError> in
+                    return .complete()
+                }
+                |> then(Signal<PeerReadState, PeerReadStateValidationError>.single(readState))
             }
         }
     } else {
-        // MARK: RufatGram: ghost mode keeps the read state local and does not
-        // tell the server, so senders do not see read receipts.
-        if SGSimpleSettings.shared.ghostHideReadReceipts {
-            return .single(readState)
-        }
         return inputPeer(postbox: postbox, peerId: peerId)
         |> mapToSignal { inputPeer -> Signal<PeerReadState, PeerReadStateValidationError> in
             switch inputPeer {
             case let .inputPeerChannel(channelId, accessHash):
                 switch readState {
                 case let .idBased(maxIncomingReadId, _, _, _, markedUnread):
-                    var pushSignal: Signal<Void, NoError> = network.request(Api.functions.channels.readHistory(channel: Api.InputChannel.inputChannel(channelId: channelId, accessHash: accessHash), maxId: maxIncomingReadId))
+                    var pushSignal: Signal<Void, NoError> = network.request(Api.functions.channels.readHistory(channel: Api.InputChannel.inputChannel(channelId: channelId, accessHash: accessHash), maxId: maxIncomingReadId), ayuPeerId: peerId)
                     |> `catch` { _ -> Signal<Api.Bool, NoError> in
                         return .complete()
                     }
@@ -278,7 +284,7 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
             default:
                 switch readState {
                 case let .idBased(maxIncomingReadId, _, _, _, markedUnread):
-                    var pushSignal: Signal<Void, NoError> = network.request(Api.functions.messages.readHistory(peer: inputPeer, maxId: maxIncomingReadId))
+                    var pushSignal: Signal<Void, NoError> = network.request(Api.functions.messages.readHistory(peer: inputPeer, maxId: maxIncomingReadId), ayuPeerId: peerId)
                     |> map(Optional.init)
                     |> `catch` { _ -> Signal<Api.messages.AffectedMessages?, NoError> in
                         return .single(nil)

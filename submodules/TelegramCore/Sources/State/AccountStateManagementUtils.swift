@@ -4179,19 +4179,19 @@ func replayFinalState(
             case let .DeleteMessagesWithGlobalIds(ids):
                 var resourceIds: [MediaResourceId] = []
                 // MARK: RufatGram: optionally keep messages deleted by others.
-                let rufatPartition = rufatPartitionDeletedMessages(transaction: transaction, ids: transaction.messageIdsForGlobalIds(ids))
-                rufatMarkMessagesDeleted(transaction: transaction, ids: rufatPartition.keep)
+                let rufatPartition = rufatPartitionDeletedMessages(transaction: transaction, accountPeerId: accountPeerId, ids: transaction.messageIdsForGlobalIds(ids))
+                rufatMarkMessagesDeleted(transaction: transaction, accountPeerId: accountPeerId, mediaBox: mediaBox, ids: rufatPartition.keep)
                 transaction.deleteMessages(rufatPartition.remove, forEachMedia: { media in
                     addMessageMediaResourceIdsToRemove(media: media, resourceIds: &resourceIds)
                 })
                 if !resourceIds.isEmpty {
                     let _ = mediaBox.removeCachedResources(Array(Set(resourceIds)), force: true).start()
                 }
-                deletedMessageIds.append(contentsOf: ids.map { .global($0) })
+                deletedMessageIds.append(contentsOf: rufatPartition.remove.map { .global($0.id) })
             case let .DeleteMessages(serverIds):
                 // MARK: RufatGram: optionally keep messages deleted by others.
-                let rufatPartition = rufatPartitionDeletedMessages(transaction: transaction, ids: serverIds)
-                rufatMarkMessagesDeleted(transaction: transaction, ids: rufatPartition.keep)
+                let rufatPartition = rufatPartitionDeletedMessages(transaction: transaction, accountPeerId: accountPeerId, ids: serverIds)
+                rufatMarkMessagesDeleted(transaction: transaction, accountPeerId: accountPeerId, mediaBox: mediaBox, ids: rufatPartition.keep)
                 let ids = rufatPartition.remove
                 _internal_deleteMessages(transaction: transaction, mediaBox: mediaBox, ids: ids, manualAddMessageThreadStatsDifference: { id, add, remove in
                     addMessageThreadStatsDifference(threadKey: id, remove: remove, addedMessagePeer: nil, addedMessageId: nil, isOutgoing: false)
@@ -4226,6 +4226,9 @@ func replayFinalState(
                     invalidateGroupStats.insert(Namespaces.PeerGroup.archive)
                 }
             case let .EditMessage(id, message):
+                if let previousMessage = transaction.getMessage(id) {
+                    AyuHistoryStore.captureEdit(transaction: transaction, accountPeerId: accountPeerId, mediaBox: mediaBox, previous: previousMessage, updated: message)
+                }
                 var generatedEvent: (reactionAuthor: Peer, reaction: MessageReaction.Reaction, message: Message, timestamp: Int32)?
                 transaction.updateMessage(id, update: { previousMessage in
                     var updatedFlags = message.flags

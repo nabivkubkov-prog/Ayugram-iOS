@@ -31,30 +31,32 @@ public extension Message {
 /// Splits server-deleted message ids into ones that may be kept locally and
 /// ones that must still be removed. Secret chats and messages with a
 /// self-destruct timer are never kept.
-func rufatPartitionDeletedMessages(transaction: Transaction, ids: [MessageId]) -> (keep: [MessageId], remove: [MessageId]) {
+func rufatPartitionDeletedMessages(transaction: Transaction, accountPeerId: PeerId, ids: [MessageId]) -> (keep: [MessageId], remove: [MessageId]) {
     guard SGSimpleSettings.shared.keepDeletedMessages else {
         return ([], ids)
     }
     var keep: [MessageId] = []
     var remove: [MessageId] = []
     for id in ids {
-        guard id.peerId.namespace != Namespaces.Peer.SecretChat, let message = transaction.getMessage(id) else {
+        guard let message = transaction.getMessage(id), AyuHistoryStore.shouldCapture(message, accountPeerId: accountPeerId) else {
             remove.append(id)
             continue
         }
-        let hasTimer = message.attributes.contains(where: { $0 is AutoremoveTimeoutMessageAttribute || $0 is AutoclearTimeoutMessageAttribute })
-        if hasTimer || message.rufatIsDeleted {
-            remove.append(id)
-        } else {
-            keep.append(id)
-        }
+        // Replayed server deletions must not erase a previously retained message.
+        keep.append(id)
     }
     return (keep, remove)
 }
 
-func rufatMarkMessagesDeleted(transaction: Transaction, ids: [MessageId]) {
+func rufatMarkMessagesDeleted(transaction: Transaction, accountPeerId: PeerId, mediaBox: MediaBox, ids: [MessageId]) {
     let timestamp = Int32(CFAbsoluteTimeGetCurrent() + kCFAbsoluteTimeIntervalSince1970)
     for id in ids {
+        if let message = transaction.getMessage(id) {
+            AyuHistoryStore.captureDeleted(transaction: transaction, accountPeerId: accountPeerId, mediaBox: mediaBox, message: message)
+            if message.rufatIsDeleted {
+                continue
+            }
+        }
         transaction.updateMessage(id, update: { currentMessage in
             var attributes = currentMessage.attributes
             attributes.append(RufatDeletedMessageAttribute(deletedAt: timestamp))

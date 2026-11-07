@@ -945,10 +945,10 @@ public final class AccountViewTracker {
                                 let request: Signal<Bool, MTRpcError>
                                 switch inputPeer {
                                 case .inputPeerChat, .inputPeerSelf, .inputPeerUser:
-                                    request = account.network.request(Api.functions.messages.readMessageContents(id: messageIds.map { $0.id }))
+                                    request = account.network.request(Api.functions.messages.readMessageContents(id: messageIds.map { $0.id }), ayuPeerId: peerId)
                                     |> map { _ in true }
                                 case let .inputPeerChannel(channelId, accessHash):
-                                    request = account.network.request(Api.functions.channels.readMessageContents(channel: .inputChannel(channelId: channelId, accessHash: accessHash), id: messageIds.map { $0.id }))
+                                    request = account.network.request(Api.functions.channels.readMessageContents(channel: .inputChannel(channelId: channelId, accessHash: accessHash), id: messageIds.map { $0.id }), ayuPeerId: peerId)
                                     |> map { _ in true }
                                 default:
                                     return .complete()

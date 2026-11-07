@@ -3,6 +3,7 @@ import Postbox
 import TelegramApi
 import SwiftSignalKit
 import MtProtoKit
+import SGSimpleSettings
 
 
 func addSecretChatOutgoingOperation(transaction: Transaction, peerId: PeerId, operation: SecretChatOutgoingOperationContents, state: SecretChatState) -> SecretChatState {
@@ -2028,6 +2029,28 @@ private func sendStandaloneMessage(auxiliaryMethods: AccountAuxiliaryMethods, po
 
 private func sendServiceActionMessage(postbox: Postbox, network: Network, peerId: PeerId, action: SecretMessageAction, tagLocalIndex: Int32, wasDelivered: Bool) -> Signal<Void, NoError> {
     return postbox.transaction { transaction -> Signal<Void, NoError> in
+        var action = action
+        if !wasDelivered,
+           case let .readMessageContents(layer, globallyUniqueId, _) = action,
+           SGSimpleSettings.shared.ayuGhostSettings(accountPath: network.basePath).hidesReadReceipts(peerId: peerId.toInt64()) {
+            if let sequenceLayer = SecretChatSequenceBasedLayer(rawValue: layer.rawValue) {
+                // Removing an allocated sequence number would leave a hole in
+                // the encrypted conversation. Persist a no-op at the same index
+                // so future retransmissions cannot reveal the discarded receipt.
+                let replacement = SecretChatOutgoingOperationContents.noop(layer: sequenceLayer, actionGloballyUniqueId: globallyUniqueId)
+                transaction.operationLogUpdateEntry(peerId: peerId, tag: OperationLogTags.SecretOutgoing, tagLocalIndex: tagLocalIndex, { entry in
+                    guard let operation = entry?.contents as? SecretChatOutgoingOperation else {
+                        return PeerOperationLogEntryUpdate(mergedIndex: .none, contents: .none)
+                    }
+                    return PeerOperationLogEntryUpdate(mergedIndex: .none, contents: .update(SecretChatOutgoingOperation(contents: replacement, mutable: false, delivered: operation.delivered)))
+                })
+                action = .noop(layer: sequenceLayer, actionGloballyUniqueId: globallyUniqueId)
+            } else {
+                // Layer 8 has no sequence counters or no-op action.
+                markOutgoingOperationAsCompleted(transaction: transaction, peerId: peerId, tagLocalIndex: tagLocalIndex, forceRemove: true)
+                return .complete()
+            }
+        }
         if let state = transaction.getPeerChatState(peerId) as? SecretChatState, let peer = transaction.getPeer(peerId) as? TelegramSecretChat {
             let decryptedMessage = boxedDecryptedSecretMessageAction(action: action)
             return sendBoxedDecryptedMessage(postbox: postbox, network: network, peer: peer, state: state, operationIndex: tagLocalIndex, decryptedMessage: decryptedMessage, globallyUniqueId: action.globallyUniqueId, file: nil, silent: false, asService: true, wasDelivered: wasDelivered)

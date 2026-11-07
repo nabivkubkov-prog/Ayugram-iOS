@@ -24,7 +24,7 @@ func _internal_markAllChatsAsRead(postbox: Postbox, network: Network, stateManag
                         let peerId = peer.peerId
                         if peerId.namespace == Namespaces.Peer.CloudChannel {
                             if let inputChannel = transaction.getPeer(peerId).flatMap(apiInputChannel) {
-                                signals.append(network.request(Api.functions.channels.readHistory(channel: inputChannel, maxId: Int32.max - 1))
+                                signals.append(network.request(Api.functions.channels.readHistory(channel: inputChannel, maxId: Int32.max - 1), ayuPeerId: peerId)
                                 |> `catch` { _ -> Signal<Api.Bool, NoError> in
                                     return .single(.boolFalse)
                                 }
@@ -34,7 +34,7 @@ func _internal_markAllChatsAsRead(postbox: Postbox, network: Network, stateManag
                             }
                         } else if peerId.namespace == Namespaces.Peer.CloudUser || peerId.namespace == Namespaces.Peer.CloudGroup {
                             if let inputPeer = transaction.getPeer(peerId).flatMap(apiInputPeer) {
-                                signals.append(network.request(Api.functions.messages.readHistory(peer: inputPeer, maxId: Int32.max - 1))
+                                signals.append(network.request(Api.functions.messages.readHistory(peer: inputPeer, maxId: Int32.max - 1), ayuPeerId: peerId)
                                 |> map(Optional.init)
                                 |> `catch` { _ -> Signal<Api.messages.AffectedMessages?, NoError> in
                                     return .single(nil)

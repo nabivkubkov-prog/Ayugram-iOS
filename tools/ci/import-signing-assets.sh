@@ -19,6 +19,13 @@ INSTALLED_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 
 fail() { echo "::error::$*" >&2; exit 1; }
 
+if [ -z "${KEYCHAIN_PASSWORD:-}" ] || [ -z "${BUILD_CERTIFICATE_BASE64:-}" ]; then
+    fail "Signed builds require BUILD_CERTIFICATE_BASE64 and KEYCHAIN_PASSWORD secrets"
+fi
+if [ -z "${PROFILES_JSON_BASE64:-}" ] && [ -z "${PROVISIONING_PROFILE_BASE64:-}" ]; then
+    fail "Signed builds require provisioning profiles for the app and its extensions"
+fi
+
 install_profile() {
     local file="$1"
     local name uuid
@@ -45,14 +52,12 @@ if [ -n "${KEYCHAIN_PASSWORD:-}" ] && [ -n "${BUILD_CERTIFICATE_BASE64:-}" ]; th
     security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
     rm -f "$CERT_PATH"
 
-    if ! security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -q "1 valid identities found"; then
+    if ! security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -qE '^ *[1-9][0-9]* valid identit'; then
         echo "Available signing identities:"
         security find-identity -v -p codesigning "$KEYCHAIN_PATH"
         fail "The imported certificate has no valid codesigning identity. Check that the .p12 contains the private key and matches the provisioning profile."
     fi
     echo "Signing identity imported successfully."
-else
-    echo "::warning::No certificate secrets provided; relying on Xcode managed signing."
 fi
 
 mkdir -p "$PROFILES_DIR"
@@ -62,13 +67,14 @@ if [ -n "${PROFILES_JSON_BASE64:-}" ]; then
     JSON_PATH="$RUNNER_TEMP/profiles.json"
     printf '%s' "$PROFILES_JSON_BASE64" | base64 --decode > "$JSON_PATH"
     python3 - "$JSON_PATH" "$PROFILES_DIR" <<'PY'
-import base64, json, pathlib, sys
+import base64, json, pathlib, re, sys
 
 manifest = json.load(open(sys.argv[1]))
 out = pathlib.Path(sys.argv[2])
 for name, payload in manifest.items():
-    safe = "".join(c for c in name if c.isalnum() or c in "-_")
-    (out / f"{safe}.mobileprovision").write_bytes(base64.b64decode(payload))
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        raise SystemExit("Invalid provisioning profile name")
+    (out / f"{name}.mobileprovision").write_bytes(base64.b64decode(payload, validate=True))
 print(f"Decoded {len(manifest)} provisioning profiles")
 PY
     for profile in "$PROFILES_DIR"/*.mobileprovision; do
@@ -82,5 +88,5 @@ elif [ -n "${PROVISIONING_PROFILE_BASE64:-}" ]; then
 fi
 
 if [ "$COUNT" -eq 0 ]; then
-    echo "::warning::No provisioning profiles provided."
+    fail "No provisioning profiles provided"
 fi

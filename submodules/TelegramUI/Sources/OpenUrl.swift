@@ -1091,7 +1091,7 @@ func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, ur
                                 navigationController?.pushViewController(sgDebugController(context: context))
                                 return
                             case "settings":
-                                navigationController?.pushViewController(rufatExtraController(context: context)) // MARK: RufatGram
+                                navigationController?.pushViewController(ayuSettingsController(context: context))
                                 return
                             case "ios_settings":
                                 context.sharedContext.applicationBindings.openSettings()

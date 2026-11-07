@@ -661,7 +661,7 @@ plist_fragment(
     template =
     """
     <key>CFBundleDisplayName</key>
-    <string>RufatGram</string>
+    <string>AyuGram</string>
     """
 )
 
@@ -1825,7 +1825,7 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>RufatGram</string>
+    <string>AyuGram</string>
     <key>CFBundleIdentifier</key>
     <string>{telegram_bundle_id}</string>
     <key>CFBundleName</key>

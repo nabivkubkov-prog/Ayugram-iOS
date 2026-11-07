@@ -1,14 +1,18 @@
-name: RufatGram iOS build
+name: AyuGram iOS build
 
 on:
-  # workflow_dispatch only works once this file is on the default branch;
-  # until then feature branches build unsigned on push.
   push:
-    branches: [ 'feature/**' ]
+    branches: [ 'ayugram-ios-port' ]
+  pull_request:
+    branches: [ 'master', 'ayugram-ios-port' ]
   workflow_dispatch:
     inputs:
       signed:
-        description: 'Build a signed IPA (requires signing secrets) instead of the unsigned prototype'
+        description: 'Sign with Apple certificates and profiles supplied through repository secrets'
+        type: boolean
+        default: false
+      checks_only:
+        description: 'Run fast configuration and artifact-validator tests without compiling the app'
         type: boolean
         default: false
 
@@ -17,18 +21,57 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test configuration and artifact validation
+        run: python3 -m unittest discover -s tools/ci/tests -v
+      - name: Check patch whitespace
+        run: git diff-tree --check HEAD
+
+  swift-checks:
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the pinned Swift toolchain
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+      - name: Verify ghost policy and preference persistence
+        run: |
+          swiftc -warnings-as-errors \
+            Swiftgram/SGSimpleSettings/Sources/AyuGhostPolicy.swift \
+            Swiftgram/SGSimpleSettings/Sources/AyuGhostPreferences.swift \
+            Tests/AyuGramCoreTests/main.swift -o "$RUNNER_TEMP/ayu-ghost-tests"
+          "$RUNNER_TEMP/ayu-ghost-tests"
+      - name: Verify message filters and Unicode regular expressions
+        run: |
+          swiftc -warnings-as-errors \
+            Swiftgram/SGSimpleSettings/Sources/AyuMessageFilter.swift \
+            Tests/AyuMessageFilterTests/main.swift -o "$RUNNER_TEMP/ayu-filter-tests"
+          "$RUNNER_TEMP/ayu-filter-tests"
+      - name: Verify message history snapshots
+        run: |
+          swiftc -warnings-as-errors \
+            submodules/TelegramCore/Sources/State/AyuHistoryModel.swift \
+            Tests/AyuHistoryTests/main.swift -o "$RUNNER_TEMP/ayu-history-tests"
+          "$RUNNER_TEMP/ayu-history-tests"
+
   build:
-    runs-on: macos-15
+    needs: [checks, swift-checks]
+    if: github.event_name != 'pull_request' && inputs.checks_only != true
+    # Preserve the Intel host architecture of the previously verified build.
+    runs-on: macos-15-intel
     timeout-minutes: 360
 
     env:
       CI: '1'
       # Pinned by versions.json; validated below instead of silently overriding.
       BAZEL_CACHE_DIR: ${{ github.workspace }}/../bazel-cache
-      # Submodules point at repos with large history; do not clone nested submodules of them.
       GIT_LFS_SKIP_SMUDGE: '1'
 
     steps:
@@ -118,7 +161,7 @@ jobs:
             echo "mode=signed" >> "$GITHUB_OUTPUT"
           else
             echo "mode=unsigned" >> "$GITHUB_OUTPUT"
-            echo "::notice::Unsigned prototype build: the IPA installs only with an external signing tool."
+            echo "::notice::This IPA requires signing with an external tool before installation on an iPhone."
           fi
 
       - name: Prepare build configuration
@@ -129,10 +172,13 @@ jobs:
           RUFATGRAM_TEAM_ID: ${{ secrets.RUFATGRAM_TEAM_ID }}
           RUFATGRAM_BUNDLE_ID: ${{ secrets.RUFATGRAM_BUNDLE_ID }}
           RUFATGRAM_URL_SCHEME: ${{ secrets.RUFATGRAM_URL_SCHEME }}
+          SIGNED_BUILD: ${{ inputs.signed }}
         run: |
           set -euo pipefail
           CONFIG="build-system/rufatgram-configuration.local.json"
-          python3 tools/ci/prepare-configuration.py build-system/rufatgram-configuration.json "$CONFIG"
+          EXTRA_ARGS=()
+          if [ "$SIGNED_BUILD" = "true" ]; then EXTRA_ARGS+=(--signed); fi
+          python3 tools/ci/prepare-configuration.py build-system/rufatgram-configuration.json "$CONFIG" "${EXTRA_ARGS[@]}"
           test -f "$CONFIG"
           echo "path=$CONFIG" >> "$GITHUB_OUTPUT"
 
@@ -157,12 +203,13 @@ jobs:
             fi
           fi
           if [ "${{ steps.signing.outputs.mode }}" = "signed" ]; then
-            echo "path=xcode-managed" >> "$GITHUB_OUTPUT"
+            echo "::error::A signed CI build requires the certificate and all application extension profiles."
+            exit 1
           else
             echo "path=$RUNNER_TEMP/rufatgram-fake-signing" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate placeholder signing assets for the prototype build
+      - name: Generate temporary signing assets for external signing
         if: steps.codesign.outputs.path != 'xcode-managed' && steps.signing.outputs.mode == 'unsigned'
         run: |
           set -euo pipefail
@@ -207,10 +254,9 @@ jobs:
           path: |
             ${{ env.BAZEL_CACHE_DIR }}
             ~/.cache/bazel
-          key: bazel-${{ runner.os }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}-${{ github.run_id }}
+          key: bazel-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}-${{ github.run_id }}
           restore-keys: |
-            bazel-${{ runner.os }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}-
-            bazel-${{ runner.os }}-
+            bazel-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('versions.json', 'MODULE.bazel', 'MODULE.bazel.lock') }}-
 
       - name: Build the app
         id: build
@@ -224,7 +270,7 @@ jobs:
             EXTRA_ARGS+=(--codesigningInformationPath="${{ steps.codesign.outputs.path }}")
           fi
 
-          mkdir -p "$BAZEL_CACHE_DIR" build/artifacts
+          mkdir -p "$BAZEL_CACHE_DIR" build/artifacts build/logs
 
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$HOME/bazel-user-root" \
@@ -235,10 +281,10 @@ jobs:
             --configuration=release_arm64 \
             --buildNumber="${{ steps.buildnum.outputs.number }}" \
             --enableParallelSwiftmoduleGeneration \
-            --outputBuildArtifactsPath="$PWD/build/artifacts"
+            --outputBuildArtifactsPath="$PWD/build/artifacts" 2>&1 | tee build/logs/build.log
 
       - name: Save Bazel cache
-        if: always() && steps.build.outcome != 'skipped'
+        if: always() && steps.build.outcome != 'skipped' && steps.bazel-cache.outputs.cache-primary-key != ''
         uses: actions/cache/save@v4
         with:
           path: |
@@ -247,7 +293,8 @@ jobs:
           key: ${{ steps.bazel-cache.outputs.cache-primary-key }}
 
       - name: Verify produced IPA
-        if: always() && steps.build.outcome == 'success'
+        id: verify
+        if: success()
         run: |
           set -euo pipefail
           IPA="build/artifacts/Swiftgram.ipa"
@@ -257,6 +304,12 @@ jobs:
             exit 1
           fi
           ls -lh "$IPA"
+          python3 tools/ci/verify-ipa.py "$IPA" \
+            --configuration "${{ steps.configuration.outputs.path }}" \
+            --build-number "${{ steps.buildnum.outputs.number }}" \
+            --commit "$GITHUB_SHA" \
+            --signing "${{ steps.signing.outputs.mode }}" \
+            --report build/artifacts/build-manifest.json
           mkdir -p build/inspect
           unzip -q "$IPA" -d build/inspect
           APP="$(find build/inspect/Payload -maxdepth 1 -name '*.app' -print -quit)"
@@ -274,7 +327,7 @@ jobs:
           fi
 
           {
-            echo "### RufatGram build"
+            echo "### AyuGram build"
             echo ""
             echo "| Field | Value |"
             echo "|---|---|"
@@ -285,7 +338,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify code signature (signed builds)
-        if: always() && steps.build.outcome == 'success' && steps.signing.outputs.mode == 'signed'
+        if: success() && steps.signing.outputs.mode == 'signed'
         run: |
           set -euo pipefail
           APP="$(find build/inspect/Payload -maxdepth 1 -name '*.app' -print -quit)"
@@ -297,36 +350,25 @@ jobs:
             security cms -D -i "$APP/embedded.mobileprovision" | plutil -extract ExpirationDate raw -o - -
             security cms -D -i "$APP/embedded.mobileprovision" | plutil -extract Entitlements.application-identifier raw -o - -
           else
-            echo "::warning::embedded.mobileprovision is missing from the signed build."
+            echo "::error::embedded.mobileprovision is missing from the signed build."
+            exit 1
           fi
 
+      - name: Name the verified artifact
+        if: success()
+        run: cp build/artifacts/Swiftgram.ipa build/artifacts/AyuGram.ipa
+
       - name: Upload IPA
-        if: always() && steps.build.outcome == 'success'
+        if: success() && steps.verify.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: RufatGram-${{ github.run_number }}-${{ steps.signing.outputs.mode }}
+          name: AyuGram-${{ github.run_number }}-${{ steps.signing.outputs.mode }}
           path: |
-            build/artifacts/Swiftgram.ipa
+            build/artifacts/AyuGram.ipa
             build/artifacts/Swiftgram.DSYMs.zip
+            build/artifacts/build-manifest.json
           if-no-files-found: error
           retention-days: 14
-
-      # Unsigned IPA for Feather/Sideloadly, which re-sign it with the user's own
-      # Apple ID. Releases give a stable public URL; artifacts need a GitHub login.
-      - name: Publish IPA as a pre-release
-        if: steps.build.outcome == 'success' && steps.signing.outputs.mode == 'unsigned'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          TAG="build-${{ github.run_number }}"
-          cp build/artifacts/Swiftgram.ipa "build/artifacts/RufatGram-${TAG}.ipa"
-          gh release create "$TAG" "build/artifacts/RufatGram-${TAG}.ipa" \
-            --repo "${{ github.repository }}" \
-            --target "${{ github.sha }}" \
-            --prerelease \
-            --title "RufatGram ${TAG} (unsigned)" \
-            --notes "Unsigned build from ${{ github.ref_name }} @ ${{ github.sha }}. Sign it on install with Feather or Sideloadly."
 
       - name: Upload build log
         if: always()
@@ -334,9 +376,18 @@ jobs:
         with:
           name: build-log-${{ github.run_number }}
           path: |
-            **/*.log
+            build/logs/build.log
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Remove temporary credentials
+        if: always()
+        run: |
+          rm -f build-system/rufatgram-configuration.local.json
+          rm -f "$RUNNER_TEMP/build_certificate.p12" "$RUNNER_TEMP/profiles.json"
+          if [ -f "$RUNNER_TEMP/app-signing.keychain-db" ]; then
+            security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db"
+          fi
 
       - name: Report failure details
         if: failure()

@@ -176,9 +176,16 @@ private func requestActivity(postbox: Postbox, network: Network, accountPeerId: 
                 }
             }
             
-            // MARK: RufatGram: ghost mode does not send typing/recording activity.
-            if SGSimpleSettings.shared.ghostHideTyping {
-                return .complete()
+            let ghost = SGSimpleSettings.shared.ayuGhostSettings(accountPath: network.basePath)
+            if let activity = activity {
+                switch activity {
+                case .speakingInGroupCall:
+                    break // Voice activity is part of a call, not a chat typing indicator.
+                case .uploadingFile, .uploadingPhoto, .uploadingVideo, .uploadingInstantVideo:
+                    if ghost.hideUploadProgress || ghost.hidesTyping(peerId: peerId.toInt64()) { return .complete() }
+                default:
+                    if ghost.hidesTyping(peerId: peerId.toInt64()) { return .complete() }
+                }
             }
             if let inputPeer = apiInputPeer(peer) {
                 var flags: Int32 = 0

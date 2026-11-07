@@ -6,6 +6,7 @@ import TelegramCore
 import AsyncDisplayKit
 import Display
 import TelegramNotices
+import SGSettingsUI
 import ContextUI
 import AccountContext
 import ChatMessageItemView
@@ -61,9 +62,21 @@ extension ChatControllerImpl {
                 
                 var actions = actions
                 switch actions.content {
-                case let .list(itemList):
+                case let .list(currentItemList):
+                    var itemList = currentItemList
                     if itemList.isEmpty {
                         return
+                    }
+                    if message.id.namespace == Namespaces.Message.Cloud && message.id.peerId.namespace != Namespaces.Peer.SecretChat {
+                        let russian = presentationData.strings.baseLanguageCode.hasPrefix("ru")
+                        itemList.append(.action(ContextMenuActionItem(text: russian ? "История AyuGram" : "AyuGram History", icon: { theme in
+                            return generateTintedImage(image: UIImage(systemName: "clock.arrow.circlepath"), color: theme.actionSheet.primaryTextColor)
+                        }, action: { [weak self] _, complete in
+                            complete(.default)
+                            guard let self = self else { return }
+                            self.push(ayuHistoryController(context: self.context, messageId: message.id))
+                        })))
+                        actions.content = .list(itemList)
                     }
                 case .custom, .twoLists:
                     break

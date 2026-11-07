@@ -1711,7 +1711,7 @@ public final class ChatHistoryListNodeImpl: ListView, ChatHistoryNode, ChatHisto
             self.currentlyPlayingMessageIdPromise.get(),
             self.scrollToMessageIdPromise.get(),
             self.chatHasBotsPromise.get(),
-            self.allAdMessagesPromise.get()
+            combineLatest(self.allAdMessagesPromise.get(), ayuChatMessageFilterState(context: self.context))
         )
         
         let contentSettings = self.context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.ContentSettings())
@@ -1824,7 +1824,8 @@ public final class ChatHistoryListNodeImpl: ListView, ChatHistoryNode, ChatHisto
             deviceContactsNumbers |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_deviceContactsNumbers"),
             contentSettings |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_contentSettings")
         ) |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_firstChatHistoryTransition")).startStrict(next: { [weak self] sharedData, /* MARK: Swiftgram */ update, chatPresentationData, selectedMessages, updatingMedia, networkType, preferredStoryHighQuality, animatedEmojiStickers, additionalAnimatedEmojiStickers, customChannelDiscussionReadState, customThreadOutgoingReadState, availableReactions, availableMessageEffects, savedMessageTags, defaultReaction, accountPeer, suggestAudioTranscription, promises, topicAuthorId, translationState, maxReadStoryId, recommendedChannels, audioTranscriptionTrial, chatThemes, deviceContactsNumbers, contentSettings in
-            let (historyAppearsCleared, pendingUnpinnedAllMessages, pendingRemovedMessages, currentlyPlayingMessageIdAndType, scrollToMessageId, chatHasBots, allAdMessages) = promises
+            let (historyAppearsCleared, pendingUnpinnedAllMessages, pendingRemovedMessages, currentlyPlayingMessageIdAndType, scrollToMessageId, chatHasBots, adMessagesAndFilterState) = promises
+            let (allAdMessages, ayuFilterState) = adMessagesAndFilterState
             
             if measure_isFirstTime {
                 measure_isFirstTime = false
@@ -2109,7 +2110,8 @@ public final class ChatHistoryListNodeImpl: ListView, ChatHistoryNode, ChatHisto
                     customThreadOutgoingReadState: customThreadOutgoingReadState,
                     cachedData: data.cachedData,
                     adMessage: allAdMessages.fixed,
-                    dynamicAdMessages: allAdMessages.opportunistic
+                    dynamicAdMessages: allAdMessages.opportunistic,
+                    ayuFilterState: ayuFilterState
                 )
                 let lastHeaderId = filteredEntries.last.flatMap { listMessageDateHeaderId(timestamp: $0.index.timestamp) } ?? 0
                 let processedView = ChatHistoryView(originalView: view, filteredEntries: filteredEntries, associatedData: associatedData, lastHeaderId: lastHeaderId, id: id, locationInput: update.2, ignoreMessagesInTimestampRange: update.3, ignoreMessageIds: update.4)

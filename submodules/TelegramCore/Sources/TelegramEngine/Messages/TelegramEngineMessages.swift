@@ -1462,8 +1462,8 @@ public extension TelegramEngine {
         
         public func markStoryAsSeen(peerId: EnginePeer.Id, id: Int32, asPinned: Bool) -> Signal<Never, NoError> {
             // MARK: Swiftgram
-            if SGSimpleSettings.shared.isStealthModeEnabled {
-                return .never()
+            if SGSimpleSettings.shared.ayuGhostSettings(accountPath: self.account.basePath).hideStories {
+                return .complete()
             }
             return _internal_markStoryAsSeen(account: self.account, peerId: peerId, id: id, asPinned: asPinned)
         }

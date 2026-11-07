@@ -3,6 +3,7 @@ import Postbox
 import TelegramApi
 import SwiftSignalKit
 import Emoji
+import SGSimpleSettings
 
 public enum EnqueueMessageGrouping {
     case none
@@ -467,6 +468,24 @@ public func resendMessages(account: Account, messageIds: [MessageId]) -> Signal<
 }
 
 func enqueueMessages(transaction: Transaction, account: Account, peerId: PeerId, messages: [(Bool, EnqueueMessage)], disableAutoremove: Bool = false, transformGroupingKeysWithPeerId: Bool = false) -> [MessageId?] {
+    let ghost = SGSimpleSettings.shared.ayuGhostSettings(accountPath: account.basePath)
+    let isBot = (transaction.getPeer(peerId) as? TelegramUser)?.botInfo != nil
+    let canSchedule = peerId.namespace != Namespaces.Peer.SecretChat && !isBot && peerId != account.peerId
+    let messages = messages.map { transformed, message -> (Bool, EnqueueMessage) in
+        return (transformed, message.withUpdatedAttributes { original in
+            var attributes = original
+            if ghost.isEnabled && ghost.useScheduledMessages && canSchedule && !attributes.contains(where: { $0 is OutgoingScheduleInfoMessageAttribute || $0 is PaidStarsMessageAttribute }) {
+                attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: Int32(account.network.context.globalTime()) + 11))
+            }
+            if ghost.isEnabled && ghost.silentSendInGhostMode && !attributes.contains(where: { $0 is NotificationInfoMessageAttribute }) {
+                attributes.append(NotificationInfoMessageAttribute(flags: .muted))
+            }
+            return attributes
+        })
+    }
+    if !messages.isEmpty {
+        ayuReadAfterInteraction(account: account, peerId: peerId, interaction: .send)
+    }
     /**
      * If it is a support account, mark messages as read here as they are
      * not marked as read when chat is opened.

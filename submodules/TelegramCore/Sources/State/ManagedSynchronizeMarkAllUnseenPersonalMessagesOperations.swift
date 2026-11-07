@@ -145,7 +145,7 @@ private func synchronizeMarkAllUnseen(transaction: Transaction, postbox: Postbox
                 guard let inputChannel = inputChannel else {
                     return .single(nil)
                 }
-                return network.request(Api.functions.channels.readMessageContents(channel: inputChannel, id: filteredIds.map { $0.id }))
+                return network.request(Api.functions.channels.readMessageContents(channel: inputChannel, id: filteredIds.map { $0.id }), ayuPeerId: peerId)
                 |> map { result -> Int32? in
                     if ids.count < limit {
                         return nil
@@ -154,7 +154,7 @@ private func synchronizeMarkAllUnseen(transaction: Transaction, postbox: Postbox
                     }
                 }
             } else {
-                return network.request(Api.functions.messages.readMessageContents(id: filteredIds.map { $0.id }))
+                return network.request(Api.functions.messages.readMessageContents(id: filteredIds.map { $0.id }), ayuPeerId: peerId)
                 |> map { result -> Int32? in
                     switch result {
                         case let .affectedMessages(pts, ptsCount):
@@ -302,7 +302,7 @@ private func synchronizeMarkAllUnseenReactions(transaction: Transaction, postbox
         }
     }
     
-    let signal = network.request(Api.functions.messages.readReactions(flags: flags, peer: inputPeer, topMsgId: topMsgId, savedPeerId: savedPeerId))
+    let signal = network.request(Api.functions.messages.readReactions(flags: flags, peer: inputPeer, topMsgId: topMsgId, savedPeerId: savedPeerId), ayuPeerId: peerId)
     |> map(Optional.init)
     |> `catch` { _ -> Signal<Api.messages.AffectedHistory?, Bool> in
         return .fail(true)

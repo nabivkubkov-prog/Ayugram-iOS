@@ -26,6 +26,9 @@ public func updateMessageReactionsInteractively(account: Account, messageIds: [M
         guard let chatPeerId = messageIds.first?.peerId else {
             return
         }
+        if !reactions.isEmpty {
+            ayuReadAfterInteraction(account: account, peerId: chatPeerId, interaction: .reaction)
+        }
         
         var messagesWithoutGroups: [Message] = []
         var messagesByGroupId: [Int64: [Message]] = [:]

@@ -59,6 +59,7 @@ func applyMediaResourceChanges(from: Media, to: Media, postbox: Postbox, force: 
 }
 
 func applyUpdateMessage(postbox: Postbox, stateManager: AccountStateManager, message: Message, cacheReferenceKey: CachedSentMediaReferenceKey?, result: Api.Updates, accountPeerId: PeerId, pendingMessageEvent: @escaping (PeerPendingMessageDelivered) -> Void) -> Signal<Void, NoError> {
+    ayuRestoreOfflineAfterSend(network: stateManager.network)
     return postbox.transaction { transaction -> Void in
         let messageId: Int32?
         var apiMessage: Api.Message?

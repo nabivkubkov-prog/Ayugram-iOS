@@ -248,7 +248,7 @@ func managedReadReactionActions(postbox: Postbox, network: Network, stateManager
 
 private func synchronizeConsumeMessageContents(transaction: Transaction, postbox: Postbox, network: Network, stateManager: AccountStateManager, id: MessageId) -> Signal<Void, NoError> {
     if id.peerId.namespace == Namespaces.Peer.CloudUser || id.peerId.namespace == Namespaces.Peer.CloudGroup {
-        return network.request(Api.functions.messages.readMessageContents(id: [id.id]))
+        return network.request(Api.functions.messages.readMessageContents(id: [id.id]), ayuPeerId: id.peerId)
             |> map(Optional.init)
             |> `catch` { _ -> Signal<Api.messages.AffectedMessages?, NoError> in
                 return .single(nil)
@@ -282,7 +282,7 @@ private func synchronizeConsumeMessageContents(transaction: Transaction, postbox
             }
     } else if id.peerId.namespace == Namespaces.Peer.CloudChannel {
         if let peer = transaction.getPeer(id.peerId), let inputChannel = apiInputChannel(peer) {
-            return network.request(Api.functions.channels.readMessageContents(channel: inputChannel, id: [id.id]))
+            return network.request(Api.functions.channels.readMessageContents(channel: inputChannel, id: [id.id]), ayuPeerId: id.peerId)
                 |> `catch` { _ -> Signal<Api.Bool, NoError> in
                     return .single(.boolFalse)
                 } |> mapToSignal { result -> Signal<Void, NoError> in
@@ -316,7 +316,7 @@ private func synchronizeConsumeMessageContents(transaction: Transaction, postbox
 
 private func synchronizeReadMessageReactions(transaction: Transaction, postbox: Postbox, network: Network, stateManager: AccountStateManager, id: MessageId) -> Signal<Void, NoError> {
     if id.peerId.namespace == Namespaces.Peer.CloudUser || id.peerId.namespace == Namespaces.Peer.CloudGroup {
-        return network.request(Api.functions.messages.readMessageContents(id: [id.id]))
+        return network.request(Api.functions.messages.readMessageContents(id: [id.id]), ayuPeerId: id.peerId)
         |> map(Optional.init)
         |> `catch` { _ -> Signal<Api.messages.AffectedMessages?, NoError> in
             return .single(nil)
@@ -350,7 +350,7 @@ private func synchronizeReadMessageReactions(transaction: Transaction, postbox: 
         }
     } else if id.peerId.namespace == Namespaces.Peer.CloudChannel {
         if let peer = transaction.getPeer(id.peerId), let inputChannel = apiInputChannel(peer) {
-            return network.request(Api.functions.channels.readMessageContents(channel: inputChannel, id: [id.id]))
+            return network.request(Api.functions.channels.readMessageContents(channel: inputChannel, id: [id.id]), ayuPeerId: id.peerId)
             |> `catch` { _ -> Signal<Api.Bool, NoError> in
                 return .single(.boolFalse)
             }

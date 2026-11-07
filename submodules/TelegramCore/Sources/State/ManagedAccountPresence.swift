@@ -16,12 +16,19 @@ private final class AccountPresenceManagerImpl {
     private var shouldKeepOnlinePresenceDisposable: Disposable?
     private let currentRequestDisposable = MetaDisposable()
     private var onlineTimer: SignalKitTimer?
+    private var settingsObserver: NSObjectProtocol?
     
     private var wasOnline: Bool = false
     
     init(queue: Queue, shouldKeepOnlinePresence: Signal<Bool, NoError>, network: Network) {
         self.queue = queue
         self.network = network
+        self.settingsObserver = NotificationCenter.default.addObserver(forName: .ayuGhostSettingsChanged, object: nil, queue: nil) { [weak self] _ in
+            self?.queue.async { [weak self] in
+                guard let self = self else { return }
+                self.updatePresence(self.wasOnline)
+            }
+        }
         
         self.shouldKeepOnlinePresenceDisposable = (shouldKeepOnlinePresence
         |> distinctUntilChanged
@@ -41,11 +48,14 @@ private final class AccountPresenceManagerImpl {
         self.shouldKeepOnlinePresenceDisposable?.dispose()
         self.currentRequestDisposable.dispose()
         self.onlineTimer?.invalidate()
+        if let settingsObserver = self.settingsObserver {
+            NotificationCenter.default.removeObserver(settingsObserver)
+        }
     }
     
     private func updatePresence(_ isOnline: Bool) {
         // MARK: RufatGram: ghost mode keeps reporting offline.
-        let isOnline = isOnline && !SGSimpleSettings.shared.ghostHideOnline
+        let isOnline = isOnline && !SGSimpleSettings.shared.ayuGhostSettings(accountPath: self.network.basePath).hideOnline
         let request: Signal<Api.Bool, MTRpcError>
         if isOnline {
             let timer = SignalKitTimer(timeout: 30.0, repeat: false, completion: { [weak self] in

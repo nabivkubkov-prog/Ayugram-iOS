@@ -1140,9 +1140,17 @@ public final class Network: NSObject, MTRequestMessageServiceDelegate {
         }
     }
     
-    public func request<T>(_ data: (FunctionDescription, Buffer, DeserializeFunctionResponse<T>), tag: NetworkRequestDependencyTag? = nil, automaticFloodWait: Bool = true, onFloodWaitError: ((String) -> Void)? = nil) -> Signal<T, MTRpcError> {
+    public func request<T>(_ data: (FunctionDescription, Buffer, DeserializeFunctionResponse<T>), tag: NetworkRequestDependencyTag? = nil, automaticFloodWait: Bool = true, onFloodWaitError: ((String) -> Void)? = nil, ayuPeerId: PeerId? = nil, ayuBypassReadSuppression: Bool = false) -> Signal<T, MTRpcError> {
         let requestService = self.requestService
+        let accountPath = self.basePath
         return Signal { subscriber in
+            // Check at subscription time, including queued content/story operations.
+            // Existing callers handle a local failure and finish their local bookkeeping;
+            // no invented server pts/response is injected into account state.
+            if !ayuBypassReadSuppression && SGSimpleSettings.shared.ayuGhostSettings(accountPath: accountPath).suppressesReceipt(function: data.0.name, peerId: ayuPeerId?.toInt64()) {
+                subscriber.putError(MTRpcError(errorCode: 400, errorDescription: "AYU_READ_SUPPRESSED"))
+                return EmptyDisposable
+            }
             let request = MTRequest()
             
             request.setPayload(data.1.makeData() as Data, metadata: WrappedRequestMetadata(metadata: WrappedFunctionDescription(data.0), tag: tag), shortMetadata: WrappedRequestShortMetadata(shortMetadata: WrappedShortFunctionDescription(data.0)), responseParser: { response in

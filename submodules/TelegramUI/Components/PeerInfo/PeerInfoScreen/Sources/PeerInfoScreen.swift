@@ -979,7 +979,7 @@ private func settingsItems(showProfileId: Bool, data: PeerInfoScreenData?, conte
     // let locale = presentationData.strings.baseLanguageCode
     // MARK: RufatGram: replaces the Swiftgram and Swiftgram Pro entries.
     let sgWebSettings = context.currentAppConfiguration.with({ $0 }).sgWebSettings
-    items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 1, label: .none, text: "Rufat Extra", icon: PresentationResourcesSettings.security, action: {
+    items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 1, label: .none, text: "AyuGram", icon: PresentationResourcesSettings.security, action: {
         interaction.openSettings(.swiftgram)
     }))
     items[.swiftgram]!.append(PeerInfoScreenDisclosureItem(id: 2, label: .none, text: presentationData.strings.baseLanguageCode == "ru" ? "Кастомизация" : "Customization", icon: PresentationResourcesSettings.appearance, action: {
@@ -10812,7 +10812,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         switch section {
         // MARK: RufatGram
         case .swiftgram:
-            self.controller?.push(rufatExtraController(context: self.context))
+            self.controller?.push(ayuSettingsController(context: self.context))
         case .swiftgramPro:
             self.controller?.push(rufatCustomizationController(context: self.context, openThemesAndWallpapers: { [weak self] in
                 guard let self else {
