@@ -31,6 +31,28 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test configuration and artifact validation
         run: python3 -m unittest discover -s tools/ci/tests -v
+      - name: Validate current repository build credentials
+        if: github.event_name != 'pull_request' && inputs.checks_only != true
+        env:
+          RUFATGRAM_API_ID: ${{ secrets.RUFATGRAM_API_ID }}
+          RUFATGRAM_API_HASH: ${{ secrets.RUFATGRAM_API_HASH }}
+          RUFATGRAM_TEAM_ID: ${{ secrets.RUFATGRAM_TEAM_ID }}
+          RUFATGRAM_BUNDLE_ID: ${{ secrets.RUFATGRAM_BUNDLE_ID }}
+          RUFATGRAM_URL_SCHEME: ${{ secrets.RUFATGRAM_URL_SCHEME }}
+          SIGNED_BUILD: ${{ inputs.signed }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, json, os
+          spec = importlib.util.spec_from_file_location("configuration", "tools/ci/prepare-configuration.py")
+          configuration = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(configuration)
+          try:
+              with open("build-system/rufatgram-configuration.json", encoding="utf-8") as file:
+                  configuration.resolve_configuration(json.load(file), os.environ, signed=os.environ.get("SIGNED_BUILD") == "true")
+          except (ValueError, OSError) as error:
+              raise SystemExit("::error::" + str(error))
+          print("Build credential format validated; values were not printed or written.")
+          PY
       - name: Check patch whitespace
         run: git diff-tree --check HEAD
 
